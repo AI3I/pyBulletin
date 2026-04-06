@@ -28,6 +28,7 @@ Command set:
   NL [locator]       — set locator / QTH
   NQ [city]          — set city / QTH text
   NZ [zip]           — set ZIP / postal code
+  NB [call]          — set home BBS
   R n [n ...]        — read message(s)
   RP n               — reply to message n (pre-fills To: and Re: subject)
   S / SP to          — send personal mail (interactive compose)
@@ -38,6 +39,8 @@ Command set:
   KM                 — kill all my mail
   O                  — show options
   O param [value]    — set option (PAGER, LINES, EXPERT, LANG, BASE, COLS, PW)
+  X                  — toggle expert mode (shorthand for O EXPERT ON/OFF)
+  BBS                — list known neighbor nodes
   W / WHO            — who / session info
   WHOAMI             — show current callsign and profile
   DATE / TIME        — show current UTC date and time
@@ -49,6 +52,8 @@ Command set:
   G / GB / GE        — goodbye (same as B)
   SH n [n ...]       — sysop: hold message(s)          [sysop]
   SR n [n ...]       — sysop: release held message(s)  [sysop]
+  ED n               — sysop: edit message via terminal [sysop]
+  MOVE n call[@bbs]  — sysop: reassign message          [sysop]
   U [search]         — sysop: list users               [sysop]
   YL [area]          — list downloadable files
   YG <filename>      — download file via YAPP
@@ -108,6 +113,8 @@ class CommandEngine:
             "RA":      self._cmd_read_all,
             "L":       self._cmd_list,
             "LA":      self._cmd_list,              # FBB alias
+            "LN":      self._cmd_list_new_login,
+            "LR":      self._cmd_list_reverse,
             "LL":      self._cmd_list_last,
             "LM":      self._cmd_list_mine,
             "LP":      self._cmd_list_mine,         # FBB alias
@@ -142,13 +149,19 @@ class CommandEngine:
             "NL":      self._cmd_nl,
             "NQ":      self._cmd_nq,
             "NZ":      self._cmd_nz,
+            "NB":      self._cmd_nb,
             # Forwarding (sysop)
             "F":       self._cmd_forward,
+            # Sysop message management
+            "ED":      self._cmd_edit_terminal,
+            "MOVE":    self._cmd_move,
             # Status / info
             "DATE":    self._cmd_datetime,
             "TIME":    self._cmd_datetime,
             "STATS":   self._cmd_stats,
             "WHOAMI":  self._cmd_whoami,
+            "X":       self._cmd_expert_toggle,
+            "BBS":     self._cmd_bbs_list,
             "WHO":     self._cmd_who,                # long form alias
             "W":       self._cmd_who,
             "J":       self._cmd_heard,
@@ -230,17 +243,20 @@ class CommandEngine:
         "HELP": "H", "VERSION": "V",
         "LL": "L", "LM": "L", "LP": "L", "LB": "L", "LT": "L",
         "LH": "L", "LK": "L", "LF": "L", "LY": "L",
-        "LA": "L", "LW": "L", "LS": "L", "LD": "L",
+        "LA": "L", "LW": "L", "LS": "L", "LD": "L", "LN": "L", "LR": "L",
         "SC": "S", "SN": "S",
         "KM": "K", "D": "K", "KILL": "K", "RM": "K",
         "MH": "SH", "MR": "SR",
         "YG": "Y", "YU": "Y", "YL": "Y",
-        "NH": "N", "NL": "N", "NQ": "N", "NZ": "N",
+        "NH": "N", "NL": "N", "NQ": "N", "NZ": "N", "NB": "N",
         "RA": "R",
         "P": "I", "WPS": "I",
         "WHO": "W", "WHOAMI": "W",
         "DATE": "V", "TIME": "V",
         "STATS": "V",
+        "X": "O",
+        "BBS": "I",
+        "ED": "K", "MOVE": "K",
     }
 
     async def _cmd_help(self, args: str) -> None:
@@ -390,6 +406,144 @@ class CommandEngine:
             f"  Home BBS : {user.home_bbs or self._cfg.node.node_call}\r\n"
             f"  Msg base : {user.msg_base}\r\n"
         )
+
+    # ------------------------------------------------------------------
+    # X — toggle expert mode (shorthand for O EXPERT ON/OFF)
+    # ------------------------------------------------------------------
+
+    async def _cmd_expert_toggle(self, args: str) -> None:
+        user = self._user
+        user.expert_mode = not user.expert_mode
+        await self._store.upsert_user(user)
+        state = "ON" if user.expert_mode else "OFF"
+        await self._s.send(f"\r\n  Expert mode {state}.\r\n")
+
+    # ------------------------------------------------------------------
+    # BBS — list known neighbor nodes
+    # ------------------------------------------------------------------
+
+    async def _cmd_bbs_list(self, args: str) -> None:
+        neighbors = self._cfg.forward.neighbors
+        if not neighbors:
+            await self._s.send("\r\n  No neighbor nodes configured.\r\n")
+            return
+        lines = [
+            "\r\n",
+            f"  {'Call':<12} {'Address':<24} {'Schedule':<14}  Status\r\n",
+            "  " + "-" * 64 + "\r\n",
+        ]
+        for n in neighbors:
+            status = "enabled" if n.enabled else "disabled"
+            lines.append(
+                f"  {n.call:<12} {(n.address or '(RF)')[:24]:<24}"
+                f" {n.schedule:<14}  {status}\r\n"
+            )
+        await self._s.send("".join(lines))
+
+    # ------------------------------------------------------------------
+    # ED n — sysop: terminal edit of a message
+    # ------------------------------------------------------------------
+
+    async def _cmd_edit_terminal(self, args: str) -> None:
+        """ED n — interactively edit subject and body of message n."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        ids = self._parse_id_list(args)
+        if not ids:
+            await self._s.send("\r\n  Usage: ED <msg#>\r\n")
+            return
+        msg = await self._store.get_message(ids[0])
+        if msg is None:
+            await self._s.send(self._st.get("read.not_found", id=ids[0]))
+            return
+        if msg.status == STATUS_KILLED:
+            await self._s.send(self._st.get("read.killed", id=ids[0]))
+            return
+
+        # Show current subject, allow change
+        await self._s.send(
+            f"\r\n  Editing message {ids[0]}\r\n"
+            f"  Current subject: {msg.subject}\r\n"
+            f"  New subject (blank to keep): "
+        )
+        new_subject = (await self._s._readline()).strip()
+        if not new_subject:
+            new_subject = msg.subject
+
+        # Show current body, then collect new body
+        await self._s.send(
+            f"\r\n  Current body ({msg.size} bytes) follows.\r\n"
+            f"  Enter new body, /EX to finish, /AB to abort:\r\n\r\n"
+        )
+        await self._s.send(msg.body.replace("\n", "\r\n") + "\r\n")
+        await self._s.send(
+            "\r\n  --- Enter new body (blank line = keep current) ---\r\n"
+        )
+
+        body_lines: list[str] = []
+        while True:
+            line = await self._s._readline()
+            if line.strip() in ("/AB", "/ab"):
+                await self._s.send(self._st.get("error.aborted"))
+                return
+            if line.strip() in ("/EX", "/ex", "\x1a", "***"):
+                break
+            body_lines.append(line)
+
+        new_body = "\n".join(body_lines).strip() if body_lines else msg.body
+
+        await self._store.update_message(
+            ids[0],
+            subject=new_subject,
+            body=new_body,
+            edited_by=self._user.call,
+            edited_at=datetime.now(timezone.utc),
+        )
+        await self._s.send(f"\r\n  Message {ids[0]} updated.\r\n")
+        LOG.info("session: sysop %s edited message %d via terminal",
+                 self._user.call, ids[0])
+
+    # ------------------------------------------------------------------
+    # MOVE n call — sysop: reassign message to different recipient
+    # ------------------------------------------------------------------
+
+    async def _cmd_move(self, args: str) -> None:
+        """MOVE n call[@bbs] — reassign message n to a different recipient."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        parts = args.split(None, 1)
+        if len(parts) < 2:
+            await self._s.send("\r\n  Usage: MOVE <msg#> <callsign[@bbs]>\r\n")
+            return
+        try:
+            msg_id = int(parts[0])
+        except ValueError:
+            await self._s.send("\r\n  Usage: MOVE <msg#> <callsign[@bbs]>\r\n")
+            return
+
+        dest = parts[1].strip().upper()
+        at_bbs = ""
+        if "@" in dest:
+            dest, at_bbs = dest.split("@", 1)
+
+        msg = await self._store.get_message(msg_id)
+        if msg is None:
+            await self._s.send(self._st.get("read.not_found", id=msg_id))
+            return
+
+        async with self._store._lock:
+            self._store._conn.execute(
+                "UPDATE messages SET to_call=?, at_bbs=? WHERE id=?",
+                (dest, at_bbs.upper(), msg_id),
+            )
+            self._store._conn.commit()
+
+        dest_str = f"{dest}@{at_bbs}" if at_bbs else dest
+        await self._s.send(f"\r\n  Message {msg_id} moved to {dest_str}.\r\n")
+        LOG.info("session: sysop %s moved message %d to %s",
+                 self._user.call, msg_id, dest_str)
 
     # ------------------------------------------------------------------
     # N — new messages summary, advance msg_base
@@ -544,6 +698,34 @@ class CommandEngine:
         LOG.info("session: %s set zip_code=%r", user.call, zip_code)
 
     # ------------------------------------------------------------------
+    # NB [call] — set / show home BBS
+    # ------------------------------------------------------------------
+
+    async def _cmd_nb(self, args: str) -> None:
+        """NB [call] — set your home BBS callsign."""
+        user = self._user
+        if args.strip():
+            home = args.strip().upper()[:12]
+        else:
+            await self._s.send(
+                f"\r\n  Current home BBS : {user.home_bbs or '(not set)'}\r\n"
+                f"  Enter home BBS call (blank to keep): "
+            )
+            home = (await self._s._readline()).strip().upper()[:12]
+            if not home:
+                return
+        user.home_bbs = home
+        await self._store.upsert_user(user)
+        # Update White Pages
+        from ..store.models import WPEntry
+        wp = await self._store.get_wp_entry(user.call) or WPEntry(call=user.call)
+        wp.home_bbs   = home
+        wp.source_bbs = self._cfg.node.node_call
+        await self._store.upsert_wp_entry(wp)
+        await self._s.send(f"\r\n  Home BBS set to: {home}\r\n")
+        LOG.info("session: %s set home_bbs=%r", user.call, home)
+
+    # ------------------------------------------------------------------
     # L — list messages (since msg_base)
     # ------------------------------------------------------------------
 
@@ -630,6 +812,31 @@ class CommandEngine:
             await self._s.send(self._st.get("error.no_permission"))
             return
         msgs = await self._store.list_messages(status=STATUS_READ)
+        await self._send_list(msgs)
+
+    async def _cmd_list_new_login(self, args: str) -> None:
+        """LN — list messages new since last login (not since msg_base pointer)."""
+        if not self._can(CAP_READ):
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        user = self._user
+        since = user.last_login_at
+        if since is None:
+            msgs = await self._store.list_messages()
+        else:
+            msgs = await self._store.list_messages(after_date=since)
+        await self._send_list(msgs)
+
+    async def _cmd_list_reverse(self, args: str) -> None:
+        """LR [n] — list last n messages, newest first (default 20)."""
+        if not self._can(CAP_READ):
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        try:
+            n = int(args.strip()) if args.strip() else 20
+        except ValueError:
+            n = 20
+        msgs = await self._store.list_messages(limit=n, reverse=True)
         await self._send_list(msgs)
 
     async def _cmd_list_ww(self, args: str) -> None:
