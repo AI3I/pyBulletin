@@ -475,7 +475,7 @@ class CommandEngine:
         try:
             n = int(n_str.strip())
         except ValueError:
-            await self._s.send(self._st.get("error.unknown_cmd"))
+            await self._s.send("\r\n  Usage: L <msg#>\r\n")
             return
         msgs = await self._store.list_messages(since_id=n - 1)
         await self._send_list(msgs)
@@ -543,7 +543,7 @@ class CommandEngine:
 
         ids = self._parse_id_list(args)
         if not ids:
-            await self._s.send(self._st.get("error.unknown_cmd"))
+            await self._s.send("\r\n  Usage: R <msg#> [msg# ...]\r\n")
             return
 
         for msg_id in ids:
@@ -622,7 +622,7 @@ class CommandEngine:
         try:
             src_id = int(parts[0])
         except ValueError:
-            await self._s.send(self._st.get("error.unknown_cmd"))
+            await self._s.send("\r\n  Usage: SC <msg#> <callsign[@bbs]>\r\n")
             return
         dest = parts[1].strip().upper()
         at_bbs = ""
@@ -715,7 +715,7 @@ class CommandEngine:
     async def _cmd_kill(self, args: str) -> None:
         ids = self._parse_id_list(args)
         if not ids:
-            await self._s.send(self._st.get("error.unknown_cmd"))
+            await self._s.send("\r\n  Usage: K <msg#> [msg# ...]\r\n")
             return
         for msg_id in ids:
             await self._kill_one(msg_id)
@@ -906,7 +906,7 @@ class CommandEngine:
             return
         ids = self._parse_id_list(args)
         if not ids:
-            await self._s.send(self._st.get("error.unknown_cmd"))
+            await self._s.send("\r\n  Usage: SH <msg#> [msg# ...]\r\n")
             return
         for msg_id in ids:
             ok = await self._store.hold_message(msg_id)
@@ -926,7 +926,7 @@ class CommandEngine:
             return
         ids = self._parse_id_list(args)
         if not ids:
-            await self._s.send(self._st.get("error.unknown_cmd"))
+            await self._s.send("\r\n  Usage: SR <msg#> [msg# ...]\r\n")
             return
         for msg_id in ids:
             ok = await self._store.release_message(msg_id)
