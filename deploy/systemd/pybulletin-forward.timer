@@ -1,0 +1,13 @@
+[Unit]
+Description=pyBulletin forwarding scheduler
+After=pybulletin.service
+
+[Timer]
+# Default: attempt forwarding every 30 minutes.
+# Individual neighbor schedules are evaluated inside the forward run.
+OnBootSec=5min
+OnUnitActiveSec=30min
+Unit=pybulletin-forward.service
+
+[Install]
+WantedBy=timers.target

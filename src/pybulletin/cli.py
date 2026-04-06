@@ -1,0 +1,263 @@
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import signal
+import sys
+
+from . import __version__
+from .config import load_config
+
+LOG = logging.getLogger(__name__)
+
+
+def _setup_logging(debug: bool = False) -> None:
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%SZ",
+        level=level,
+        stream=sys.stdout,
+    )
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="pybulletin", description=f"pyBulletin {__version__}")
+    ap.add_argument("--config", default="config/pybulletin.toml", metavar="PATH")
+    ap.add_argument("--debug", action="store_true")
+
+    sub = ap.add_subparsers(dest="command")
+    sub.add_parser("serve-core", help="Start the core BBS service (telnet + transports)")
+    sub.add_parser("serve-web",  help="Start the web service (public UI + sysop console)")
+    sub.add_parser("run-forward",   help="Run one forwarding cycle and exit")
+    sub.add_parser("run-retention", help="Run message retention cleanup and exit")
+    sub.add_parser("doctor",     help="Print deployment health summary")
+    return ap
+
+
+async def _serve_core(config_path: str) -> None:
+    from .store.store import BBSStore
+    from .strings import StringCatalog
+    from .transport.telnet import TelnetServer
+    from .transport.kiss_tcp import KissTcpLink
+    from .transport.kiss_serial import KissSerialLink
+    from .transport.conference import ConferenceHub
+    from .ax25.router import AX25Router
+    from .ax25.beacon import BeaconTask
+    from .session.session import BBSSession
+
+    cfg = load_config(config_path)
+    LOG.info("pyBulletin %s starting — node %s", __version__, cfg.node.node_call)
+
+    store   = BBSStore(cfg.store.sqlite_path)
+    strings = StringCatalog("config/strings.toml")
+    conf_hub = ConferenceHub()
+
+    # --- Telnet / TCP transport ---
+    async def _session_handler(reader, writer, meta):
+        session = BBSSession(
+            reader, writer, meta, cfg, store, strings,
+            conference_hub=conf_hub,
+        )
+        await session.run()
+
+    server = TelnetServer(
+        cfg.telnet.host,
+        cfg.telnet.port,
+        _session_handler,
+        max_clients=cfg.telnet.max_clients,
+        idle_timeout=float(cfg.telnet.idle_timeout_seconds),
+    )
+    await server.start()
+
+    extra_servers: list[TelnetServer] = []
+    for port in cfg.telnet.ports:
+        if port != cfg.telnet.port:
+            s = TelnetServer(
+                cfg.telnet.host, port, _session_handler,
+                max_clients=cfg.telnet.max_clients,
+                idle_timeout=float(cfg.telnet.idle_timeout_seconds),
+            )
+            await s.start()
+            extra_servers.append(s)
+
+    # --- AX.25 / KISS transport ---
+    kiss_link = None
+    beacon    = None
+
+    async def _send_ax25(frame, port=0):
+        if kiss_link:
+            await kiss_link.send_frame(frame, port)
+
+    router = AX25Router(cfg, store, strings, _send_ax25)
+
+    kiss = cfg.kiss
+    if kiss.device:
+        kiss_link = KissSerialLink(
+            kiss.device, kiss.baud, router,
+            init_cmds=list(kiss.init_cmds),
+            init_delay_ms=kiss.init_delay_ms,
+        )
+        kiss_link.start()
+        LOG.info("serve-core: KISS serial on %s at %d baud", kiss.device, kiss.baud)
+        if kiss.init_cmds:
+            LOG.info("serve-core: TNC init sequence: %s", kiss.init_cmds)
+    elif kiss.tcp_host:
+        kiss_link = KissTcpLink(kiss.tcp_host, kiss.tcp_port, router)
+        kiss_link.start()
+        LOG.info("serve-core: KISS TCP → %s:%d", kiss.tcp_host, kiss.tcp_port)
+    else:
+        LOG.info("serve-core: no KISS TNC configured — RF disabled")
+
+    if kiss_link and cfg.beacon.enabled:
+        beacon = BeaconTask(router, cfg)
+        beacon.start()
+        LOG.info("serve-core: beacon enabled — %s", cfg.beacon.text)
+
+    # --- PACTOR ---
+    pactor_link = None
+    if cfg.pactor.enabled:
+        from .transport.pactor import PactorLink
+        pactor_link = PactorLink(
+            cfg.pactor.device, cfg.pactor.baud, router,
+            paclen=cfg.pactor.paclen,
+        )
+        pactor_link.start()
+        LOG.info("serve-core: PACTOR on %s at %d baud", cfg.pactor.device, cfg.pactor.baud)
+
+    # --- Run until signal ---
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop.set)
+
+    LOG.info("serve-core: running — waiting for SIGINT/SIGTERM")
+    await stop.wait()
+    LOG.info("serve-core: shutting down")
+
+    if beacon:
+        beacon.stop()
+    if pactor_link:
+        await pactor_link.stop()
+    if kiss_link:
+        await kiss_link.stop()
+    await server.stop()
+    for s in extra_servers:
+        await s.stop()
+    await store.close()
+
+
+async def _serve_web(config_path: str) -> None:
+    from pathlib import Path
+    from .store.store import BBSStore
+    from .web.server import HTTPServer
+    from .web.app import WebApp
+
+    cfg = load_config(config_path)
+    LOG.info("pyBulletin %s web starting — node %s", __version__, cfg.node.node_call)
+
+    store  = BBSStore(cfg.store.sqlite_path)
+    app    = WebApp(cfg, store)
+    app.start()
+
+    static_dir = Path(__file__).parent / "web" / "static"
+    server = HTTPServer(
+        cfg.web.host,
+        cfg.web.port,
+        app.handle_request,
+        ws_handler=app.handle_ws,
+        static_dir=static_dir,
+    )
+    await server.start()
+
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop.set)
+
+    LOG.info("serve-web: running on %s:%d", cfg.web.host, cfg.web.port)
+    await stop.wait()
+    LOG.info("serve-web: shutting down")
+
+    await server.stop()
+    app.stop()
+    await store.close()
+
+
+async def _cmd_doctor(config_path: str) -> None:
+    from pathlib import Path
+    cfg = load_config(config_path)
+    print(f"pyBulletin {__version__}")
+    print(f"  node      : {cfg.node.node_call}")
+    print(f"  qth       : {cfg.node.qth}")
+    print(f"  telnet    : {cfg.telnet.host}:{cfg.telnet.port}")
+    print(f"  web       : {cfg.web.host}:{cfg.web.port}")
+    print(f"  public    : {'enabled' if cfg.public_web.enabled else 'disabled'}")
+    print(f"  db        : {cfg.store.sqlite_path}")
+    db_exists = Path(cfg.store.sqlite_path).exists()
+    print(f"  db exists : {db_exists}")
+    if db_exists:
+        from .store.store import BBSStore
+        store = BBSStore(cfg.store.sqlite_path)
+        print(f"  messages  : {await store.count_messages()}")
+        print(f"  users     : {len(await store.list_users())}")
+        print(f"  wp entries: {await store.count_wp_entries()}")
+        await store.close()
+
+
+async def _cmd_run_forward(config_path: str) -> None:
+    from .store.store import BBSStore
+    from .forward.scheduler import ForwardScheduler
+
+    cfg   = load_config(config_path)
+    store = BBSStore(cfg.store.sqlite_path)
+    try:
+        scheduler = ForwardScheduler(cfg, store)
+        sent, received = await scheduler.run_once()
+        LOG.info("run-forward: done — sent %d, received %d", sent, received)
+    finally:
+        await store.close()
+
+
+async def _cmd_run_retention(config_path: str) -> None:
+    cfg = load_config(config_path)
+    from .store.store import BBSStore
+    store = BBSStore(cfg.store.sqlite_path)
+    r = cfg.retention
+    removed = await store.cleanup_expired(
+        personal_days=r.personal_mail_days,
+        bulletin_days=r.bulletin_days,
+        nts_days=r.nts_days,
+        killed_days=r.killed_days,
+    )
+    await store.close()
+    LOG.info("retention: removed %d expired message(s)", removed)
+
+
+def main() -> None:
+    ap = _build_parser()
+    args = ap.parse_args()
+    _setup_logging(args.debug)
+
+    if not args.command:
+        ap.print_help()
+        sys.exit(0)
+
+    if args.command == "serve-core":
+        asyncio.run(_serve_core(args.config))
+    elif args.command == "serve-web":
+        asyncio.run(_serve_web(args.config))
+    elif args.command == "doctor":
+        asyncio.run(_cmd_doctor(args.config))
+    elif args.command == "run-forward":
+        asyncio.run(_cmd_run_forward(args.config))
+    elif args.command == "run-retention":
+        asyncio.run(_cmd_run_retention(args.config))
+    else:
+        ap.print_help()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,311 @@
+# pyBulletin user-visible string catalog
+# Edit this file while the BBS is running — changes take effect within 30 seconds.
+# Keys use dotted notation: [section] key = "value"
+# Substitution tokens use Python str.format() syntax: {node}, {call}, etc.
+
+# ---------------------------------------------------------------------------
+# Connection / session lifecycle
+# ---------------------------------------------------------------------------
+
+[connect]
+banner    = "\r\n{branding} [{node_call}] de {node_call} >\r\n"
+motd      = "\r\n{motd}\r\n"
+login_tip = "\r\n{login_tip}\r\n"
+prompt    = "\r\n{node_call}>{suffix} "
+prompt_expert = "{node_call}> "
+goodbye   = "\r\nBye de {node_call}\r\n"
+session_info = "Welcome, {call}. You have {new_mail} new message(s).\r\n"
+page_break = "\r\n-- More -- (press ENTER or A to abort) "
+
+# ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+
+[auth]
+enter_call     = "\r\nCallsign: "
+enter_password = "Password: "
+bad_call       = "\r\n? Invalid callsign.\r\n"
+bad_password   = "\r\n? Incorrect password.\r\n"
+not_registered = "\r\n? Callsign not registered. Contact the sysop.\r\n"
+locked_out     = "\r\n? Access denied.\r\n"
+
+# ---------------------------------------------------------------------------
+# Help (H command)
+# ---------------------------------------------------------------------------
+
+[help]
+short = """\r
+Commands:\r
+  L   List messages          R   Read messages\r
+  S   Send message           K   Kill message\r
+  N   Set your name/QTH      O   Options\r
+  H   Help                   I   Info / white pages\r
+  B   Bye (disconnect)       ?   Detailed help\r
+  C   Conference chat        T   Page the sysop\r
+  W   List files             D   Download file\r
+  Y   YAPP file transfer     V   Version\r
+\r
+Type ?<command> for detailed help, e.g. ?L or ?S\r
+"""
+
+banner = "\r\npyBulletin — {branding} [{node_call}] — {version}\r\n"
+
+# ---------------------------------------------------------------------------
+# ?<cmd> — per-command detailed help
+# ---------------------------------------------------------------------------
+
+[help.cmd]
+H = """\r
+H  — show this help summary\r
+?<cmd>  — detailed help for any command (e.g. ?L, ?S, ?O)\r
+"""
+
+L = """\r
+L  [n]      list messages from message # n (default: from your base)\r
+LL [n]      list last n messages (default 10)\r
+LM / LP     list your personal mail\r
+LB [cat]    list bulletins, optionally filtered by category (e.g. LB WX)\r
+LT          list NTS/radiogram traffic\r
+LH          list held messages\r
+LK          list killed messages\r
+LF          list forwarded messages\r
+LY          list read (Y) messages\r
+L> n        list starting from message # n\r
+\r
+Columns: # Type Status Size To From Date Subject\r
+Type:   P=Personal  B=Bulletin  T=NTS\r
+Status: N=New  Y=Read  H=Held  K=Killed  F=Forwarded\r
+"""
+
+R = """\r
+R n [n ...]  read message(s) by number\r
+             Personal mail: you must be the sender or recipient.\r
+             Example:  R 12   or   R 12 13 15\r
+"""
+
+S = """\r
+S  / SP <call>             send personal mail to <call>\r
+SB <cat>                   send bulletin  (e.g. SB WX  or  SB ALL)\r
+ST <call>                  send NTS radiogram\r
+SC <msg#> <call[@bbs]>     copy message to another recipient\r
+\r
+You will be prompted for To, At BBS, Subject, then body text.\r
+End the body with /EX or Ctrl-Z (^Z) on a line by itself.\r
+"""
+
+K = """\r
+K n [n ...]  kill (delete) message(s) by number\r
+             You may only kill messages you sent or received.\r
+KM           kill all of your personal mail\r
+"""
+
+N = """\r
+N            show new-message count and advance your message base\r
+NH [name]    set your display name  (no arg = show current)\r
+NL [locator] set your Maidenhead locator, e.g. FN20  (no arg = show current)\r
+NQ [city]    set your city / QTH description  (no arg = show current)\r
+NZ [zip]     set your ZIP / postal code  (no arg = show current)\r
+"""
+
+O = """\r
+O                   show current options\r
+O PAGER <n>         set page length (lines per screen); 0 = paging off\r
+O EXPERT on|off     toggle expert mode (suppresses extra prompts)\r
+O LANG <code>       set language preference (e.g. en)\r
+O BASE <n>          set your message base pointer to message # n\r
+O PW                change your login password\r
+"""
+
+I = """\r
+I           show node information (callsign, QTH, version)\r
+I <call>    look up <call> in the White Pages directory\r
+P <call>    alias for I <call>\r
+"""
+
+W = """\r
+W  — show currently connected stations\r
+"""
+
+J = """\r
+J  — list recently heard stations (RF / AX.25 channel only)\r
+     Not available on telnet connections.\r
+"""
+
+C = """\r
+C  — enter the multi-user conference (chat room)\r
+     Type your message and press Enter to broadcast to all participants.\r
+     /EXIT, /Q, B, or Q  to leave the conference.\r
+"""
+
+V = """\r
+V  — show software version, node callsign, and QTH\r
+"""
+
+Y = """\r
+YL [area]       list downloadable files, optionally filtered by area\r
+YG <filename>   download a file using the YAPP binary transfer protocol\r
+YU <filename>   upload  a file using the YAPP binary transfer protocol\r
+\r
+YAPP is supported by most packet terminal programs (TelePac, KAM, etc.).\r
+"""
+
+SH = """\r
+SH n [n ...]   hold message(s) — prevents forwarding  [sysop]\r
+SR n [n ...]   release held message(s) back to normal  [sysop]\r
+"""
+
+U = """\r
+U [search]  list registered users; optionally filter by partial callsign  [sysop]\r
+"""
+
+# ---------------------------------------------------------------------------
+# L — list messages
+# ---------------------------------------------------------------------------
+
+[list]
+header   = "\r\n  Msg  TS   Size  To          From        Date       Subject\r\n"
+divider  = "-----  --  -----  ----------  ----------  ---------  ----------------------------\r\n"
+row      = "{id:>5}  {type}{status}  {size:>5}  {to:<10}  {from:<10}  {date}  {subject}\r\n"
+no_msgs  = "\r\nNo messages found.\r\n"
+end      = "\r\n{count} message(s).\r\n"
+
+# ---------------------------------------------------------------------------
+# R / V — read messages
+# ---------------------------------------------------------------------------
+
+[read]
+header_from    = "From    : {from_call}\r\n"
+header_to      = "To      : {to_call}\r\n"
+header_at      = "At      : {at_bbs}\r\n"
+header_date    = "Date    : {date}\r\n"
+header_subject = "Subject : {subject}\r\n"
+header_bid     = "BID     : {bid}\r\n"
+header_size    = "Size    : {size} bytes\r\n"
+separator      = "---\r\n"
+footer         = "\r\n[Message {id} — {type}]\r\n"
+not_found      = "\r\n? Message {id} not found.\r\n"
+not_yours      = "\r\n? Message {id} is not addressed to you.\r\n"
+killed         = "\r\n? Message {id} has been killed.\r\n"
+
+# ---------------------------------------------------------------------------
+# S — send message
+# ---------------------------------------------------------------------------
+
+[send]
+enter_to       = "\r\nTo      : "
+enter_at       = "At BBS  : "
+enter_subject  = "Subject : "
+enter_body     = "Enter message text. End with /EX or Ctrl-Z on a line by itself.\r\n"
+saved          = "\r\nMessage {id} saved.\r\n"
+too_large      = "\r\n? Message body exceeds maximum size ({max} bytes).\r\n"
+bad_address    = "\r\n? Invalid address: {addr}\r\n"
+queued_forward = "\r\nMessage {id} queued for forwarding to {bbs}.\r\n"
+
+# ---------------------------------------------------------------------------
+# K — kill message
+# ---------------------------------------------------------------------------
+
+[kill]
+ok         = "\r\nMessage {id} killed.\r\n"
+not_found  = "\r\n? Message {id} not found.\r\n"
+not_yours  = "\r\n? You may only kill your own messages.\r\n"
+held       = "\r\n? Message {id} is held — ask the sysop to kill it.\r\n"
+
+# ---------------------------------------------------------------------------
+# N — user profile
+# ---------------------------------------------------------------------------
+
+[profile]
+enter_name    = "\r\nYour name (max 12 chars): "
+enter_home    = "Home BBS callsign       : "
+enter_locator = "QRA locator (e.g. FN20) : "
+enter_city    = "City / QTH              : "
+enter_zip     = "ZIP / postal code       : "
+enter_pw_new  = "New password            : "
+enter_pw_conf = "Confirm password        : "
+pw_mismatch   = "\r\n? Passwords do not match.\r\n"
+pw_too_short  = "\r\n? Password must be at least 6 characters.\r\n"
+saved         = "\r\nProfile updated.\r\n"
+
+# ---------------------------------------------------------------------------
+# O — options
+# ---------------------------------------------------------------------------
+
+[options]
+header         = "\r\nCurrent options for {call}:\r\n"
+paging         = "  Paging      : {state} ({lines} lines per page)\r\n"
+language       = "  Language    : {lang}\r\n"
+msg_base       = "  Msg base    : {base}\r\n"
+expert_mode    = "  Expert mode : {state}\r\n"
+changed        = "\r\nOption updated.\r\n"
+invalid        = "\r\n? Invalid option or value.\r\n"
+
+# ---------------------------------------------------------------------------
+# I — info / white pages
+# ---------------------------------------------------------------------------
+
+[info]
+bbs_info       = "\r\n{branding} running on {node_call} at {qth}\r\nSysop: {owner}\r\n"
+wp_header      = "\r\nWhite Pages lookup:\r\n"
+wp_found       = "  {call:<10} Home: {home_bbs:<12} Name: {name}\r\n"
+wp_not_found   = "\r\n? No white pages entry for {call}.\r\n"
+wp_count       = "\r\nWhite Pages: {count} records.\r\n"
+version        = "\r\n{branding} {version} — {node_call} — {qth}\r\n"
+
+# ---------------------------------------------------------------------------
+# C — conference / chat
+# ---------------------------------------------------------------------------
+
+[chat]
+joined     = "\r\n*** {call} joined the conference.\r\n"
+left       = "\r\n*** {call} left the conference.\r\n"
+empty      = "\r\nNo other stations in conference.\r\n"
+who_header = "\r\nConference participants:\r\n"
+who_row    = "  {call}\r\n"
+msg_fmt    = "\r\n[{call}] {text}\r\n"
+exit_tip   = "\r\nType /EXIT to leave the conference.\r\n"
+
+# ---------------------------------------------------------------------------
+# W / D — file listing and download
+# ---------------------------------------------------------------------------
+
+[files]
+header     = "\r\nFiles in area '{area}':\r\n"
+row        = "  {filename:<20} {size:>7} bytes  {description}\r\n"
+no_files   = "\r\nNo files in this area.\r\n"
+not_found  = "\r\n? File '{filename}' not found.\r\n"
+sending    = "\r\nSending {filename} ({size} bytes)...\r\n"
+done       = "\r\nTransfer complete.\r\n"
+failed     = "\r\n? Transfer failed.\r\n"
+
+# ---------------------------------------------------------------------------
+# Forwarding / sysop notices
+# ---------------------------------------------------------------------------
+
+[forward]
+connecting    = "\r\n[FWD] Connecting to {call}...\r\n"
+connected     = "\r\n[FWD] Session established with {call}.\r\n"
+sent          = "\r\n[FWD] Sent {count} message(s) to {call}.\r\n"
+received      = "\r\n[FWD] Received {count} message(s) from {call}.\r\n"
+no_traffic    = "\r\n[FWD] No traffic to exchange with {call}.\r\n"
+failed        = "\r\n[FWD] Session with {call} failed: {reason}\r\n"
+complete      = "\r\n[FWD] Forward complete.\r\n"
+
+# ---------------------------------------------------------------------------
+# Sysop paging
+# ---------------------------------------------------------------------------
+
+[sysop]
+paged     = "\r\nSysop has been paged.\r\n"
+not_avail = "\r\nSysop is not available.\r\n"
+
+# ---------------------------------------------------------------------------
+# Generic errors
+# ---------------------------------------------------------------------------
+
+[error]
+unknown_cmd   = "\r\n? Unknown command. Type H for help.\r\n"
+not_auth      = "\r\n? You must be logged in to use this command.\r\n"
+no_permission = "\r\n? You do not have permission for this command.\r\n"
+aborted       = "\r\nAborted.\r\n"
+internal      = "\r\n? Internal error. Please try again.\r\n"

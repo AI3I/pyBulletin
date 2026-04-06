@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pyBulletin — System Operator Console</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <span class="nav-brand">py<span>Bulletin</span> <span style="color:var(--warn);font-size:.75rem;font-weight:600;letter-spacing:.04em">SYSTEM OPERATOR</span></span>
+  <div class="nav-links" id="nav-links" style="display:none">
+    <button onclick="showView('dashboard')"  id="nav-dashboard">Dashboard</button>
+    <button onclick="showView('messages')"   id="nav-messages">Messages</button>
+    <button onclick="showView('users')"      id="nav-users">Users</button>
+    <button onclick="showView('neighbors')"  id="nav-neighbors">Neighbors</button>
+    <button onclick="showView('config')"     id="nav-config">Configuration</button>
+  </div>
+  <div class="nav-right">
+    <div class="ws-indicator" id="ws-indicator">
+      <span class="dot dot-gray" id="ws-dot"></span>
+      <span id="ws-label">offline</span>
+    </div>
+    <span class="callsign-badge" id="call-badge" style="display:none"></span>
+    <button class="btn btn-ghost btn-sm" id="logout-btn" onclick="logout()" style="display:none">Logout</button>
+    <button class="theme-btn" onclick="toggleTheme()">◑</button>
+  </div>
+</nav>
+
+<main>
+
+<!-- LOGIN -->
+<div class="view active" id="view-login">
+  <section class="panel gate">
+    <header>
+      <div>
+        <h2>System Operator Login</h2>
+        <div class="subtle">pyBulletin System Operator Console</div>
+      </div>
+    </header>
+    <div class="body">
+      <div class="gate-note">Sign in with a callsign that has System Operator access on this node.</div>
+      <div class="form-grid one">
+        <div class="field">
+          <label for="login-call">Callsign</label>
+          <input id="login-call" type="text" style="text-transform:uppercase"
+                 onkeydown="if(event.key==='Enter')login()">
+        </div>
+        <div class="field">
+          <label for="login-pass">Password</label>
+          <input id="login-pass" type="password"
+                 onkeydown="if(event.key==='Enter')login()">
+        </div>
+      </div>
+      <div class="actions">
+        <button onclick="login()">Sign In</button>
+      </div>
+      <div class="statusline error hidden" id="login-error"></div>
+      <div class="statusline" id="login-status">Awaiting System Operator login.</div>
+    </div>
+  </section>
+</div>
+
+<!-- DASHBOARD -->
+<div class="view" id="view-dashboard">
+  <div class="section-header">
+    <h2>Dashboard</h2>
+    <button class="btn btn-ghost btn-sm" onclick="loadDashboard()">↻ Refresh</button>
+  </div>
+  <div class="stat-grid" id="dash-stats">
+    <div class="stat-box"><div class="stat-value" id="s-msgs">—</div><div class="stat-label">Total Msgs</div></div>
+    <div class="stat-box"><div class="stat-value" id="s-new-p">—</div><div class="stat-label">New Private</div></div>
+    <div class="stat-box"><div class="stat-value" id="s-new-b">—</div><div class="stat-label">New Bulletins</div></div>
+    <div class="stat-box"><div class="stat-value" id="s-new-t">—</div><div class="stat-label">New NTS</div></div>
+    <div class="stat-box"><div class="stat-value" id="s-users">—</div><div class="stat-label">Users</div></div>
+    <div class="stat-box"><div class="stat-value" id="s-wp">—</div><div class="stat-label">WP Entries</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">Node</div>
+      <table><tbody id="dash-node-info"></tbody></table>
+    </div>
+    <div class="card" style="margin-bottom:0;padding:0">
+      <div style="padding:.75rem 1rem .4rem"><span class="card-title" style="display:inline">Forward Neighbors</span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Call</th><th>Status</th><th>Sent</th><th>Rcvd</th><th>Last Connect</th></tr></thead>
+          <tbody id="dash-nbr-tbody"><tr><td colspan="5" class="empty-state">—</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+    <div class="card" style="margin-bottom:0;padding:0">
+      <div style="padding:.75rem 1rem .4rem;display:flex;align-items:center;gap:.5rem">
+        <span class="card-title" style="display:inline;flex:1">Recent Messages</span>
+        <button class="btn btn-ghost btn-sm" onclick="showView('messages')">View all →</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>T</th><th>To</th><th>From</th><th>Subject</th></tr></thead>
+          <tbody id="dash-msgs-tbody"><tr><td colspan="5" class="empty-state">—</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:0;padding:0">
+      <div style="padding:.75rem 1rem .4rem;display:flex;align-items:center;gap:.5rem">
+        <span class="card-title" style="display:inline;flex:1">Recent Logins</span>
+        <button class="btn btn-ghost btn-sm" onclick="showView('users')">View all →</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Call</th><th>When</th><th>From</th></tr></thead>
+          <tbody id="dash-logins-tbody"><tr><td colspan="3" class="empty-state">—</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MESSAGES -->
+<div class="view" id="view-messages">
+  <div class="section-header">
+    <h2>Messages</h2>
+    <button class="btn btn-primary btn-sm" onclick="toggleMsgCompose()">+ Compose</button>
+    <button class="btn btn-ghost btn-sm" onclick="loadMessages()">↻ Refresh</button>
+  </div>
+
+  <!-- Compose form -->
+  <div class="card" id="msg-compose-card" style="display:none;margin-bottom:.75rem">
+    <div class="card-title">Compose Message</div>
+    <div class="form-row-inline">
+      <div class="form-row">
+        <label>Type</label>
+        <select id="cmp-type">
+          <option value="P">Private (P)</option>
+          <option value="B">Bulletin (B)</option>
+          <option value="T">NTS (T)</option>
+        </select>
+      </div>
+      <div class="form-row" style="flex:2">
+        <label>To</label>
+        <input type="text" id="cmp-to" placeholder="W1AW or ALL" style="text-transform:uppercase">
+      </div>
+      <div class="form-row" style="flex:2">
+        <label>At BBS</label>
+        <input type="text" id="cmp-at" placeholder="W3BBS (optional)" style="text-transform:uppercase">
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Subject</label>
+      <input type="text" id="cmp-subject" placeholder="Subject line">
+    </div>
+    <div class="form-row">
+      <label>Body</label>
+      <textarea id="cmp-body" rows="8" placeholder="Message text…"></textarea>
+    </div>
+    <div style="display:flex;gap:.5rem">
+      <button class="btn btn-primary btn-sm" onclick="sendMessage()">Send</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleMsgCompose()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Read panel -->
+  <div class="card" id="msg-read-card" style="display:none;margin-bottom:.75rem">
+    <div class="section-header" style="margin-bottom:.6rem">
+      <h2 id="read-title">Message</h2>
+      <button class="btn btn-ghost btn-sm" onclick="closeMsgRead()">✕ Close</button>
+      <button class="btn btn-ghost btn-sm" id="read-reply-btn" onclick="replyToMsg()">Reply</button>
+      <button class="btn btn-ghost btn-sm" id="read-edit-btn" onclick="toggleMsgEdit()">Edit</button>
+      <button class="btn btn-danger btn-sm" id="read-kill-btn" onclick="killCurrentMsg()">Kill</button>
+    </div>
+    <div class="msg-header" id="read-header"></div>
+    <!-- Edit form (hidden until Edit clicked) -->
+    <div id="msg-edit-form" style="display:none;margin-top:.75rem">
+      <div class="form-row">
+        <label>Subject</label>
+        <input type="text" id="edit-subject" placeholder="Subject">
+      </div>
+      <div class="form-row">
+        <label>Body</label>
+        <textarea id="edit-body" rows="10"></textarea>
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <button class="btn btn-primary btn-sm" onclick="saveEditMsg()">Save Edit</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleMsgEdit()">Cancel</button>
+      </div>
+    </div>
+    <div class="msg-body"   id="read-body"></div>
+  </div>
+
+  <div class="filter-bar">
+    <input type="search" id="msg-search" placeholder="Search…" oninput="filterMessages()">
+    <select id="msg-type" onchange="loadMessages()">
+      <option value="">All types</option>
+      <option value="P">Private</option>
+      <option value="B">Bulletins</option>
+      <option value="T">NTS</option>
+    </select>
+    <select id="msg-status" onchange="loadMessages()">
+      <option value="">All status</option>
+      <option value="N">New</option>
+      <option value="Y">Read</option>
+      <option value="H">Held</option>
+      <option value="K">Killed</option>
+    </select>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>T</th><th>St</th><th>To</th><th>From</th>
+              <th>Date</th><th>Subject</th><th>Size</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="msg-tbody">
+          <tr><td colspan="9" class="empty-state">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- USERS -->
+<div class="view" id="view-users">
+  <div class="section-header">
+    <h2>Users</h2>
+    <button class="btn btn-ghost btn-sm" onclick="loadUsers()">↻ Refresh</button>
+    <button class="btn btn-success btn-sm" onclick="toggleCreateUser()">+ Create User</button>
+  </div>
+
+  <!-- Create user inline form -->
+  <div class="card" id="create-user-card" style="display:none;margin-bottom:.75rem">
+    <div class="card-title">Create User</div>
+    <div class="form-row-inline">
+      <div class="form-row">
+        <label>Callsign</label>
+        <input type="text" id="new-call" placeholder="W1AW" style="text-transform:uppercase"
+               onkeydown="if(event.key==='Enter')createUser()">
+      </div>
+      <div class="form-row">
+        <label>Password</label>
+        <input type="password" id="new-pass" placeholder="min 6 chars"
+               onkeydown="if(event.key==='Enter')createUser()">
+      </div>
+      <div class="form-row">
+        <label>Privilege</label>
+        <select id="new-priv">
+          <option value="user">User</option>
+          <option value="sysop">System Operator</option>
+          <option value="">Guest</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:.5rem">
+      <button class="btn btn-primary btn-sm" onclick="createUser()">Create</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleCreateUser()">Cancel</button>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <input type="search" id="user-search" placeholder="Search call or name…" oninput="loadUsers()">
+    <select id="user-priv" onchange="loadUsers()">
+      <option value="">All privileges</option>
+      <option value="sysop">System Operator</option>
+      <option value="user">User</option>
+    </select>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Call</th><th>Display Name</th><th>Privilege</th><th>Home BBS</th>
+              <th>Last Login</th><th>Last IP</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="user-tbody">
+          <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- NEIGHBORS -->
+<div class="view" id="view-neighbors">
+  <div class="section-header">
+    <h2>Forward Neighbors</h2>
+    <button class="btn btn-ghost btn-sm" onclick="loadNeighbors()">↻ Refresh</button>
+    <button class="btn btn-success btn-sm" onclick="toggleAddNeighbor()">+ Add Neighbor</button>
+  </div>
+
+  <!-- Add / Edit neighbor form -->
+  <div class="card" id="nbr-form-card" style="display:none;margin-bottom:.75rem">
+    <div class="card-title" id="nbr-form-title">Add Neighbor</div>
+    <div class="form-row-inline">
+      <div class="form-row">
+        <label>Callsign</label>
+        <input type="text" id="nbr-call" placeholder="W3BBS" style="text-transform:uppercase">
+      </div>
+      <div class="form-row" style="flex:3">
+        <label>Address (host:port or AX.25 call)</label>
+        <input type="text" id="nbr-address" placeholder="bbs.example.com:7300">
+      </div>
+      <div class="form-row">
+        <label>Protocol</label>
+        <select id="nbr-protocol">
+          <option value="b2">B2F</option>
+          <option value="b1">B1</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row-inline">
+      <div class="form-row" style="flex:2">
+        <label>Schedule (cron, UTC)</label>
+        <input type="text" id="nbr-schedule" placeholder="0 */2 * * *">
+      </div>
+      <div class="form-row" style="flex:2">
+        <label>Categories (space-separated)</label>
+        <input type="text" id="nbr-categories" placeholder="WW NA US" style="text-transform:uppercase">
+      </div>
+      <div class="form-row">
+        <label>Binary mode</label>
+        <select id="nbr-binmode">
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Enabled</label>
+        <select id="nbr-enabled">
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:.5rem">
+      <button class="btn btn-primary btn-sm" id="nbr-save-btn" onclick="saveNeighbor()">Save</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleAddNeighbor()">Cancel</button>
+    </div>
+    <input type="hidden" id="nbr-editing-call">
+  </div>
+
+  <div class="card" style="padding:0">
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Call</th><th>Address</th><th>Proto</th><th>Schedule</th><th>Categories</th>
+              <th>Status</th><th>Sent</th><th>Rcvd</th><th>Last Connect</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="nbr-tbody">
+          <tr><td colspan="10" class="empty-state">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIGURATION -->
+<div class="view" id="view-config">
+  <div class="section-header">
+    <h2>Node Configuration</h2>
+  </div>
+  <div class="card">
+    <div id="config-form"></div>
+    <div style="display:flex;gap:.5rem;margin-top:.5rem">
+      <button class="btn btn-primary" onclick="saveConfig()">Save</button>
+      <button class="btn btn-ghost" onclick="loadConfig()">Reset</button>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<div id="toast-area"></div>
+<script src="sysop.js"></script>
+</body>
+</html>

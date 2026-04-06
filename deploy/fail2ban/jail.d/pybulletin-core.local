@@ -1,0 +1,7 @@
+[pybulletin-core-auth]
+enabled  = true
+filter   = pybulletin-auth-core
+logpath  = /var/log/pybulletin/authfail.log
+maxretry = 5
+findtime = 600
+bantime  = 3600

@@ -1,0 +1,86 @@
+# pyBulletin configuration
+# Copy this file and edit for your node.
+# Local overrides go in pybulletin.local.toml (auto-created by sysop console).
+
+[node]
+node_call    = "N0BBS-1"
+node_alias   = "N0BBS"
+owner_name   = "BBS Sysop"
+qth          = "Unknown"
+node_locator = ""
+motd         = "Welcome to pyBulletin"
+branding_name = "pyBulletin"
+welcome_title = "Welcome"
+welcome_body  = ""
+login_tip     = "Type H for help, B to disconnect."
+show_status_after_login = true
+require_password        = true
+support_contact         = ""
+website_url             = ""
+# This node's position in the forwarding hierarchy, most-general first.
+# Used to decide which bulletins to accept and forward.
+# Example: ["WW", "NA", "US", "US-PA"]
+hierarchy = ["WW"]
+
+[telnet]
+host               = "0.0.0.0"
+port               = 6300
+max_clients        = 50
+idle_timeout_seconds = 1800
+max_line_length    = 256
+
+[web]
+# Sysop console — bind to 127.0.0.1 and proxy via nginx for external access
+host        = "127.0.0.1"
+port        = 8080
+admin_token = ""   # set a long random token; required for sysop console access
+
+[public_web]
+enabled    = false
+host       = "127.0.0.1"
+port       = 8081
+static_dir = ""    # leave empty to use the bundled web/public_bbs/static path
+
+[store]
+sqlite_path = "./data/pybulletin.db"
+files_path  = "./data/files"
+
+[retention]
+personal_mail_days = 30
+bulletin_days      = 14
+nts_days           = 7
+killed_days        = 1
+
+[kiss]
+# Serial KISS TNC — leave device empty to disable
+device = ""
+baud   = 9600
+paclen = 236      # maximum AX.25 packet payload bytes
+
+# KISS over TCP (Dire Wolf, soundmodem, etc.) — leave tcp_host empty to disable
+tcp_host = ""
+tcp_port = 8001
+
+[beacon]
+enabled          = false
+text             = "pyBulletin BBS {node_call} - {version}"
+interval_seconds = 600
+path             = ""   # digipeater path, e.g. "WIDE1-1"
+
+[rate_limit]
+max_connections_per_ip              = 5
+max_messages_per_session_per_hour   = 20
+max_message_body_bytes              = 32768   # 32 KB
+
+[forward]
+enabled = true
+
+# Forward neighbors — repeat this block for each neighbor BBS.
+# [[forward.neighbor]]
+# call       = "W3BBS-1"
+# address    = "192.168.1.10:6300"   # host:port for TCP, or AX.25 callsign for RF
+# protocol   = "b2"                  # "b1" or "b2"
+# schedule   = "0 */2 * * *"        # cron expression (UTC) for outbound connects
+# categories = ["WW", "NA", "US"]   # bulletin prefixes to exchange
+# bin_mode   = true
+# enabled    = true

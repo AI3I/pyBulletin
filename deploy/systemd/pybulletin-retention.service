@@ -1,0 +1,10 @@
+[Unit]
+Description=pyBulletin message retention cleanup
+
+[Service]
+Type=oneshot
+User=pybulletin
+Group=pybulletin
+WorkingDirectory=/home/pybulletin/pyBulletin
+Environment=PYTHONPATH=src
+ExecStart=/usr/local/bin/pybulletin-python -m pybulletin.cli --config config/pybulletin.toml run-retention

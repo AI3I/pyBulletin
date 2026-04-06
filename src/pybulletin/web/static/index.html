@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pyBulletin</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav id="nav">
+  <span class="nav-brand">py<span>Bulletin</span></span>
+  <div class="nav-links" id="nav-links" style="display:none">
+    <button onclick="showView('messages')" id="nav-messages">Messages</button>
+    <button onclick="showView('compose')"  id="nav-compose">Compose</button>
+    <button onclick="showView('wp')"       id="nav-wp">White Pages</button>
+    <button onclick="showView('profile')"  id="nav-profile">Profile</button>
+  </div>
+  <div class="nav-right">
+    <div class="ws-indicator" id="ws-indicator">
+      <span class="dot dot-gray" id="ws-dot"></span>
+      <span id="ws-label">offline</span>
+    </div>
+    <span class="callsign-badge" id="call-badge" style="display:none"></span>
+    <button class="btn btn-ghost btn-sm" id="logout-btn" onclick="logout()" style="display:none">Logout</button>
+    <button class="theme-btn" onclick="toggleTheme()">◑</button>
+  </div>
+</nav>
+
+<main>
+
+<!-- LOGIN -->
+<div class="view active" id="view-login">
+  <section class="panel gate">
+    <header>
+      <div>
+        <h2 id="login-branding">pyBulletin</h2>
+        <div class="subtle" id="login-node">Connecting…</div>
+      </div>
+    </header>
+    <div class="body">
+      <div class="form-grid one">
+        <div class="field">
+          <label for="login-call">Callsign</label>
+          <input id="login-call" type="text" autocomplete="username"
+                 style="text-transform:uppercase" onkeydown="if(event.key==='Enter')login()">
+        </div>
+        <div class="field">
+          <label for="login-pass">Password</label>
+          <input id="login-pass" type="password" autocomplete="current-password"
+                 onkeydown="if(event.key==='Enter')login()">
+        </div>
+      </div>
+      <div class="actions">
+        <button onclick="login()">Connect</button>
+      </div>
+      <div class="statusline error hidden" id="login-error"></div>
+    </div>
+  </section>
+</div>
+
+<!-- MESSAGES -->
+<div class="view" id="view-messages">
+  <div class="section-header">
+    <h2>Messages</h2>
+    <button class="btn btn-primary btn-sm" onclick="showView('compose')">+ Compose</button>
+    <button class="btn btn-ghost btn-sm" onclick="loadMessages()">↻ Refresh</button>
+  </div>
+
+  <div class="filter-bar">
+    <input type="search" id="msg-search" placeholder="Search subject…" oninput="filterMessages()">
+    <select id="msg-type" onchange="loadMessages()">
+      <option value="">All types</option>
+      <option value="P">Private</option>
+      <option value="B">Bulletins</option>
+      <option value="T">NTS</option>
+    </select>
+    <select id="msg-status" onchange="loadMessages()">
+      <option value="">All status</option>
+      <option value="N">New</option>
+      <option value="Y">Read</option>
+    </select>
+    <select id="msg-to" onchange="loadMessages()">
+      <option value="">All recipients</option>
+      <option value="__me__">Mine only</option>
+    </select>
+  </div>
+
+  <div class="card" style="padding:0">
+    <div class="tbl-wrap">
+      <table id="msg-table">
+        <thead>
+          <tr>
+            <th>#</th><th>T</th><th>S</th><th>To</th><th>From</th>
+            <th>Date</th><th>Subject</th><th style="width:80px"></th>
+          </tr>
+        </thead>
+        <tbody id="msg-tbody">
+          <tr><td colspan="8" class="empty-state">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- READ MESSAGE -->
+<div class="view" id="view-read">
+  <div class="section-header">
+    <h2>Message <span id="read-id"></span></h2>
+    <button class="btn btn-ghost btn-sm" onclick="showView('messages')">← Back</button>
+    <button class="btn btn-danger btn-sm" id="read-kill-btn" onclick="killCurrentMsg()">Kill</button>
+  </div>
+  <div class="msg-header" id="read-header"></div>
+  <div class="msg-body" id="read-body"></div>
+  <div style="margin-top:.75rem;display:flex;gap:.5rem">
+    <button class="btn btn-ghost btn-sm" onclick="replyToMsg()">Reply</button>
+  </div>
+</div>
+
+<!-- COMPOSE -->
+<div class="view" id="view-compose">
+  <div class="section-header">
+    <h2>Compose Message</h2>
+    <button class="btn btn-ghost btn-sm" onclick="showView('messages')">← Back</button>
+  </div>
+  <div class="card">
+    <div class="form-row-inline">
+      <div class="form-row">
+        <label>Type</label>
+        <select id="compose-type">
+          <option value="P">Private (P)</option>
+          <option value="B">Bulletin (B)</option>
+          <option value="T">NTS (T)</option>
+        </select>
+      </div>
+      <div class="form-row" style="flex:2">
+        <label>To</label>
+        <input type="text" id="compose-to" placeholder="W1AW or ALL"
+               style="text-transform:uppercase">
+      </div>
+      <div class="form-row" style="flex:2">
+        <label>At BBS</label>
+        <input type="text" id="compose-at" placeholder="W3BBS (optional)"
+               style="text-transform:uppercase">
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Subject</label>
+      <input type="text" id="compose-subject" placeholder="Subject line">
+    </div>
+    <div class="form-row">
+      <label>Body</label>
+      <textarea id="compose-body" rows="10" placeholder="Message text…"></textarea>
+    </div>
+    <div style="display:flex;gap:.5rem">
+      <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+      <button class="btn btn-ghost" onclick="showView('messages')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- WHITE PAGES -->
+<div class="view" id="view-wp">
+  <div class="section-header"><h2>White Pages</h2></div>
+  <div class="card">
+    <div class="filter-bar">
+      <input type="search" id="wp-search" placeholder="Callsign…"
+             style="text-transform:uppercase"
+             onkeydown="if(event.key==='Enter')wpLookup()">
+      <button class="btn btn-primary btn-sm" onclick="wpLookup()">Look up</button>
+    </div>
+    <div id="wp-result"></div>
+  </div>
+</div>
+
+<!-- PROFILE -->
+<div class="view" id="view-profile">
+  <div class="section-header"><h2>My Profile</h2></div>
+  <div class="card" id="profile-card">
+    <p class="empty-state">Loading…</p>
+  </div>
+</div>
+
+</main>
+
+<div id="toast-area"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

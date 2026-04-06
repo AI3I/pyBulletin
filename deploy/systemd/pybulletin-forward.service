@@ -1,0 +1,11 @@
+[Unit]
+Description=pyBulletin forwarding run (triggered by timer)
+After=pybulletin.service
+
+[Service]
+Type=oneshot
+User=pybulletin
+Group=pybulletin
+WorkingDirectory=/home/pybulletin/pyBulletin
+Environment=PYTHONPATH=src
+ExecStart=/usr/local/bin/pybulletin-python -m pybulletin.cli --config config/pybulletin.toml run-forward

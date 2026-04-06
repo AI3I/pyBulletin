@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pybulletin"
+dynamic = ["version"]
+description = "Modern packet radio BBS with web UI, FBB-compatible forwarding, and AX.25/KISS/PACTOR transport"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+tnc = ["pyserial-asyncio>=0.6"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+pybulletin = "pybulletin.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pybulletin.__version__"}
+
+[tool.setuptools.package-data]
+pybulletin = ["py.typed"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
