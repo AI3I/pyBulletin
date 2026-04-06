@@ -847,6 +847,18 @@ class BBSStore:
             rows = self._conn.execute(sql, params).fetchall()
         return [_row_to_wp(r) for r in rows]
 
+    async def search_wp(self, term: str) -> list[WPEntry]:
+        """Search WP entries by partial callsign or name (case-insensitive)."""
+        pat = f"%{term.upper()}%"
+        async with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM wp_entries "
+                "WHERE UPPER(call) LIKE ? OR UPPER(name) LIKE ? "
+                "ORDER BY call LIMIT 50",
+                (pat, pat),
+            ).fetchall()
+        return [_row_to_wp(r) for r in rows]
+
     async def count_wp_entries(self) -> int:
         async with self._lock:
             row = self._conn.execute("SELECT COUNT(*) FROM wp_entries").fetchone()

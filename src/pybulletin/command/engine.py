@@ -9,6 +9,7 @@ Command set:
   V / VERSION        — version info
   I [call]           — node info / white pages lookup
   L [opts]           — list messages (since msg_base)
+  LA                 — list all messages (alias for L)
   LL [n]             — list last n messages
   LM / LP            — list my mail (personal)
   LB [cat]           — list bulletins (optionally filtered)
@@ -17,6 +18,9 @@ Command set:
   LK                 — list killed messages
   LF                 — list forwarded messages
   LY                 — list read messages
+  LW                 — list worldwide (WW) bulletins
+  LS <text>          — search messages by subject/to/from
+  LD <MMDD|YYYYMMDD> — list messages since a date
   L> n               — list from message n
   N                  — new message summary, advance msg_base
   RA                 — read all new personal mail sequentially
@@ -25,17 +29,22 @@ Command set:
   NQ [city]          — set city / QTH text
   NZ [zip]           — set ZIP / postal code
   R n [n ...]        — read message(s)
+  RP n               — reply to message n (pre-fills To: and Re: subject)
   S / SP to          — send personal mail (interactive compose)
   SB to              — send bulletin
   ST / SN to         — send NTS traffic
   SC n call[@bbs]    — copy message to another recipient
-  K n [n ...]        — kill message(s)
+  K / D / KILL n     — kill message(s)
   KM                 — kill all my mail
   O                  — show options
-  O param [value]    — set option (PAGER, EXPERT, LANG, BASE, PW)
-  W                  — who / connections
+  O param [value]    — set option (PAGER, LINES, EXPERT, LANG, BASE, COLS, PW)
+  W / WHO            — who / session info
+  WHOAMI             — show current callsign and profile
+  DATE / TIME        — show current UTC date and time
+  STATS              — node statistics
   J                  — heard stations (RF channel only)
   P call             — white pages lookup (alias for I <call>)
+  WPS name           — search White Pages by name or partial call
   F [neighbor]       — trigger forward to neighbor (sysop only)
   G / GB / GE        — goodbye (same as B)
   SH n [n ...]       — sysop: hold message(s)          [sysop]
@@ -98,17 +107,22 @@ class CommandEngine:
             "N":       self._cmd_new,
             "RA":      self._cmd_read_all,
             "L":       self._cmd_list,
+            "LA":      self._cmd_list,              # FBB alias
             "LL":      self._cmd_list_last,
             "LM":      self._cmd_list_mine,
-            "LP":      self._cmd_list_mine,       # FBB alias
+            "LP":      self._cmd_list_mine,         # FBB alias
             "LB":      self._cmd_list_bulletins,
             "LT":      self._cmd_list_nts,
             "LH":      self._cmd_list_held,
             "LK":      self._cmd_list_killed,
             "LF":      self._cmd_list_forwarded,
             "LY":      self._cmd_list_read,
+            "LW":      self._cmd_list_ww,
+            "LS":      self._cmd_list_search,
+            "LD":      self._cmd_list_date,
             "R":       self._cmd_read,
             "RE":      self._cmd_read,
+            "RP":      self._cmd_reply,
             # Message sending / copying
             "S":       self._cmd_send_private,
             "SP":      self._cmd_send_private,
@@ -119,6 +133,9 @@ class CommandEngine:
             # Kill
             "K":       self._cmd_kill,
             "KM":      self._cmd_kill_mine,
+            "D":       self._cmd_kill,               # legacy alias
+            "KILL":    self._cmd_kill,               # long form
+            "RM":      self._cmd_kill,               # MSYS alias
             # Options / profile
             "O":       self._cmd_options,
             "NH":      self._cmd_nh,
@@ -127,9 +144,16 @@ class CommandEngine:
             "NZ":      self._cmd_nz,
             # Forwarding (sysop)
             "F":       self._cmd_forward,
-            # Status
+            # Status / info
+            "DATE":    self._cmd_datetime,
+            "TIME":    self._cmd_datetime,
+            "STATS":   self._cmd_stats,
+            "WHOAMI":  self._cmd_whoami,
+            "WHO":     self._cmd_who,                # long form alias
             "W":       self._cmd_who,
             "J":       self._cmd_heard,
+            # WP search
+            "WPS":     self._cmd_wp_search,
             # Sysop
             "SH":      self._cmd_sysop_hold,
             "MH":      self._cmd_sysop_hold,     # FBB alias
@@ -202,17 +226,21 @@ class CommandEngine:
 
     # Aliases → canonical command name for help lookup
     _HELP_ALIASES: dict[str, str] = {
-        "SP": "S", "RE": "R", "WP": "I", "INFO": "I",
+        "SP": "S", "RE": "R", "RP": "R", "WP": "I", "INFO": "I",
         "HELP": "H", "VERSION": "V",
         "LL": "L", "LM": "L", "LP": "L", "LB": "L", "LT": "L",
         "LH": "L", "LK": "L", "LF": "L", "LY": "L",
+        "LA": "L", "LW": "L", "LS": "L", "LD": "L",
         "SC": "S", "SN": "S",
-        "KM": "K",
+        "KM": "K", "D": "K", "KILL": "K", "RM": "K",
         "MH": "SH", "MR": "SR",
         "YG": "Y", "YU": "Y", "YL": "Y",
         "NH": "N", "NL": "N", "NQ": "N", "NZ": "N",
         "RA": "R",
-        "P": "I",
+        "P": "I", "WPS": "I",
+        "WHO": "W", "WHOAMI": "W",
+        "DATE": "V", "TIME": "V",
+        "STATS": "V",
     }
 
     async def _cmd_help(self, args: str) -> None:
@@ -295,6 +323,73 @@ class CommandEngine:
             ))
         else:
             await self._s.send(self._st.get("info.wp_not_found", call=call))
+
+    async def _cmd_wp_search(self, args: str) -> None:
+        """WPS name — search White Pages by name or partial callsign."""
+        term = args.strip()
+        if not term:
+            await self._s.send("\r\n  Usage: WPS <name or partial call>\r\n")
+            return
+        entries = await self._store.search_wp(term)
+        if not entries:
+            await self._s.send(f"\r\n  No WP entries matching '{term}'.\r\n")
+            return
+        lines = [
+            "\r\n",
+            f"  {'Call':<12} {'Name':<20}  Home BBS\r\n",
+            "  " + "-" * 50 + "\r\n",
+        ]
+        for e in entries:
+            lines.append(f"  {e.call:<12} {(e.name or '')[:20]:<20}  {e.home_bbs}\r\n")
+        lines.append(f"\r\n  {len(entries)} match(es).\r\n")
+        await self._s.send_paged("".join(lines))
+
+    # ------------------------------------------------------------------
+    # DATE / TIME — current UTC clock
+    # ------------------------------------------------------------------
+
+    async def _cmd_datetime(self, args: str) -> None:
+        now = datetime.now(timezone.utc)
+        await self._s.send(
+            f"\r\n  {now.strftime('%Y-%m-%d %H:%M:%S')} UTC\r\n"
+        )
+
+    # ------------------------------------------------------------------
+    # STATS — node statistics
+    # ------------------------------------------------------------------
+
+    async def _cmd_stats(self, args: str) -> None:
+        total   = await self._store.count_messages()
+        new_p   = await self._store.count_messages(status=STATUS_NEW, msg_type=MSG_PRIVATE)
+        new_b   = await self._store.count_messages(status=STATUS_NEW, msg_type=MSG_BULLETIN)
+        users   = len(await self._store.list_users())
+        wp      = await self._store.count_wp_entries()
+        cfg     = self._cfg
+        lines = [
+            "\r\n",
+            f"  Node     : {cfg.node.node_call}  ({cfg.node.qth})\r\n",
+            f"  Messages : {total} total  {new_p} new private  {new_b} new bulletins\r\n",
+            f"  Users    : {users}\r\n",
+            f"  WP entries: {wp}\r\n",
+        ]
+        neighbors = cfg.forward.neighbors
+        if neighbors:
+            lines.append(f"  Neighbors: {', '.join(n.call for n in neighbors)}\r\n")
+        await self._s.send("".join(lines))
+
+    # ------------------------------------------------------------------
+    # WHOAMI — show current session info
+    # ------------------------------------------------------------------
+
+    async def _cmd_whoami(self, args: str) -> None:
+        user = self._user
+        await self._s.send(
+            f"\r\n  Callsign : {user.call}\r\n"
+            f"  Name     : {user.display_name or '(not set)'}\r\n"
+            f"  Privilege: {user.privilege or 'user'}\r\n"
+            f"  Home BBS : {user.home_bbs or self._cfg.node.node_call}\r\n"
+            f"  Msg base : {user.msg_base}\r\n"
+        )
 
     # ------------------------------------------------------------------
     # N — new messages summary, advance msg_base
@@ -537,6 +632,65 @@ class CommandEngine:
         msgs = await self._store.list_messages(status=STATUS_READ)
         await self._send_list(msgs)
 
+    async def _cmd_list_ww(self, args: str) -> None:
+        """LW — list worldwide bulletins (to_call = WW)."""
+        if not self._can(CAP_READ):
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        msgs = await self._store.list_messages(msg_type=MSG_BULLETIN, to_call="WW")
+        await self._send_list(msgs)
+
+    async def _cmd_list_search(self, args: str) -> None:
+        """LS [text] — list messages whose subject/from/to contains text."""
+        if not self._can(CAP_READ):
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        term = args.strip()
+        if not term:
+            await self._s.send("\r\n  Usage: LS <search text>\r\n")
+            return
+        # Search subject; also check from_call / to_call prefix
+        msgs = await self._store.list_messages(search=term)
+        # Also include rows where from_call or to_call starts with term
+        from_msgs = await self._store.list_messages(from_call=term.upper())
+        to_msgs   = await self._store.list_messages(to_call=term.upper())
+        seen: set[int] = {m.id for m in msgs}
+        for m in (*from_msgs, *to_msgs):
+            if m.id not in seen:
+                msgs.append(m)
+                seen.add(m.id)
+        msgs.sort(key=lambda m: m.id)
+        await self._send_list(msgs)
+
+    async def _cmd_list_date(self, args: str) -> None:
+        """LD [MMDD | YYYYMMDD] — list messages since a date (UTC)."""
+        if not self._can(CAP_READ):
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        term = args.strip()
+        if not term:
+            await self._s.send("\r\n  Usage: LD <MMDD | YYYYMMDD>\r\n")
+            return
+        from datetime import timezone as _tz
+        now = datetime.now(timezone.utc)
+        try:
+            if len(term) == 4:   # MMDD
+                after = datetime(now.year, int(term[:2]), int(term[2:]),
+                                 tzinfo=_tz.utc)
+            elif len(term) == 6:  # YYMMDD
+                after = datetime(2000 + int(term[:2]), int(term[2:4]),
+                                 int(term[4:]), tzinfo=_tz.utc)
+            elif len(term) == 8:  # YYYYMMDD
+                after = datetime(int(term[:4]), int(term[4:6]),
+                                 int(term[6:]), tzinfo=_tz.utc)
+            else:
+                raise ValueError
+        except (ValueError, OverflowError):
+            await self._s.send("\r\n  Usage: LD <MMDD | YYYYMMDD>\r\n")
+            return
+        msgs = await self._store.list_messages(after_date=after)
+        await self._send_list(msgs)
+
     async def _send_list(self, msgs: list[Message]) -> None:
         if not msgs:
             await self._s.send(self._st.get("list.no_msgs"))
@@ -627,6 +781,29 @@ class CommandEngine:
             await self._store.mark_read(msg_id, self._user.call)
 
     # ------------------------------------------------------------------
+    # RP n — reply to message n
+    # ------------------------------------------------------------------
+
+    async def _cmd_reply(self, args: str) -> None:
+        """RP n — reply to message n, pre-filling To: and Re: subject."""
+        if not self._can(CAP_SEND):
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        ids = self._parse_id_list(args)
+        if not ids:
+            await self._s.send("\r\n  Usage: RP <msg#>\r\n")
+            return
+        msg = await self._store.get_message(ids[0])
+        if msg is None:
+            await self._s.send(self._st.get("read.not_found", id=ids[0]))
+            return
+        # Reply goes back to sender; pre-fill subject with Re: prefix
+        to_call = msg.from_call
+        subject = msg.subject if msg.subject.upper().startswith("RE:") \
+                  else f"Re: {msg.subject}"
+        await self._compose(to_call, MSG_PRIVATE, subject=subject)
+
+    # ------------------------------------------------------------------
     # S / SP / SB / ST — send message (interactive compose)
     # ------------------------------------------------------------------
 
@@ -676,7 +853,13 @@ class CommandEngine:
         LOG.info("session: %s copied message %d to %s as %d",
                  self._user.call, src_id, dest, new_id)
 
-    async def _compose(self, to_arg: str, msg_type: str) -> None:
+    async def _compose(
+        self,
+        to_arg: str,
+        msg_type: str,
+        *,
+        subject: str = "",
+    ) -> None:
         if not self._can(CAP_SEND):
             await self._s.send(self._st.get("error.no_permission"))
             return
@@ -701,8 +884,11 @@ class CommandEngine:
             at_bbs = (await self._s._readline()).strip().upper()
 
         # --- Subject ---
-        await self._s.send(s.get("send.enter_subject"))
-        subject = (await self._s._readline()).strip()
+        if not subject:
+            await self._s.send(s.get("send.enter_subject"))
+            subject = (await self._s._readline()).strip()
+        else:
+            await self._s.send(f"\r\n  Subject: {subject}\r\n")
         if not subject:
             await self._s.send(s.get("error.aborted"))
             return
@@ -818,6 +1004,9 @@ class CommandEngine:
         if param == "PAGER" and value.upper() in ("ON", "OFF"):
             user.page_length = 24 if value.upper() == "ON" else 0
             changed = True
+        elif param in ("LINES", "PAGER") and value.isdigit():
+            user.page_length = max(0, int(value))
+            changed = True
         elif param == "EXPERT" and value.upper() in ("ON", "OFF"):
             user.expert_mode = value.upper() == "ON"
             changed = True
@@ -830,6 +1019,11 @@ class CommandEngine:
                 changed = True
             except ValueError:
                 pass
+        elif param in ("COLS", "WIDTH") and value.isdigit():
+            # Store column width as a user preference
+            await self._store.set_user_pref(user.call, "cols", value)
+            await self._s.send(f"\r\n  Terminal width set to {value}.\r\n")
+            return
 
         if changed:
             await self._store.upsert_user(user)
@@ -942,8 +1136,11 @@ class CommandEngine:
     # ------------------------------------------------------------------
 
     async def _cmd_who(self, args: str) -> None:
+        user = self._user
+        now  = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         await self._s.send(
-            f"\r\n  {self._user.call} (you) — {self._s.meta.peer}\r\n"
+            f"\r\n  {user.call}  {self._s.meta.peer}"
+            f"  [{self._s.meta.channel}]  {now}\r\n"
         )
 
     # ------------------------------------------------------------------
