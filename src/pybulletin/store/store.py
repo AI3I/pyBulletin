@@ -546,6 +546,7 @@ class BBSStore:
         to_call: str | None = None,
         msg_type: str | None = None,
         status: str | None = None,
+        exclude_killed: bool = True,
     ) -> int:
         parts = ["SELECT COUNT(*) FROM messages WHERE 1=1"]
         params: list[Any] = []
@@ -558,6 +559,8 @@ class BBSStore:
         if status:
             parts.append("AND status = ?")
             params.append(status)
+        elif exclude_killed:
+            parts.append("AND status != 'K'")
         async with self._lock:
             row = self._conn.execute(" ".join(parts), params).fetchone()
         return row[0] if row else 0
