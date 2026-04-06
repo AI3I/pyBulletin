@@ -82,6 +82,68 @@ async def _serve_core(config_path: str) -> None:
             await s.start()
             extra_servers.append(s)
 
+    # --- B2F inbound forward listener ---
+    fwd_server = None
+    if cfg.forward.enabled and cfg.forward.listen_port:
+        from .forward.session import ForwardSession
+        from .forward.sid import parse as parse_sid
+        from .config import ForwardNeighborConfig
+
+        async def _forward_handler(reader, writer):
+            peer = writer.get_extra_info("peername", ("?", 0))
+            LOG.info("forward: inbound connection from %s:%s", *peer)
+            try:
+                sid_line = await asyncio.wait_for(reader.readline(), timeout=15.0)
+            except asyncio.TimeoutError:
+                writer.close()
+                return
+            sid_str = sid_line.decode("ascii", errors="replace").strip()
+            remote_sid = parse_sid(sid_str)
+            remote_call = (remote_sid.call if remote_sid else "").upper()
+
+            neighbor = next(
+                (n for n in cfg.forward.neighbors
+                 if n.call.upper() == remote_call and n.enabled),
+                ForwardNeighborConfig(call=remote_call or "UNKNOWN"),
+            )
+
+            # Shim: replay the already-read SID line before the live reader
+            class _PrefixedReader:
+                def __init__(self, prefix: bytes, inner):
+                    self._buf = prefix
+                    self._inner = inner
+                async def readline(self_inner):
+                    if self_inner._buf:
+                        line, self_inner._buf = self_inner._buf, b""
+                        return line
+                    return await self_inner._inner.readline()
+                async def readexactly(self_inner, n):
+                    return await self_inner._inner.readexactly(n)
+                def at_eof(self_inner):
+                    return self_inner._inner.at_eof()
+
+            sess = ForwardSession(cfg, store, neighbor)
+            sess._reader = _PrefixedReader(sid_line, reader)
+            sess._writer = writer
+            try:
+                await sess._run(caller=False)
+            except Exception as exc:
+                LOG.warning("forward: inbound session error: %s", exc)
+            finally:
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+
+        fwd_server = await asyncio.start_server(
+            _forward_handler,
+            cfg.forward.listen_host,
+            cfg.forward.listen_port,
+        )
+        LOG.info("serve-core: B2F forward listener on %s:%d",
+                 cfg.forward.listen_host, cfg.forward.listen_port)
+
     # --- AX.25 / KISS transport ---
     kiss_link = None
     beacon    = None
@@ -142,6 +204,9 @@ async def _serve_core(config_path: str) -> None:
         await pactor_link.stop()
     if kiss_link:
         await kiss_link.stop()
+    if fwd_server:
+        fwd_server.close()
+        await fwd_server.wait_closed()
     await server.stop()
     for s in extra_servers:
         await s.stop()

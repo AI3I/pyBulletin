@@ -108,6 +108,24 @@ class ForwardSession:
 
         return self._sent, self._received
 
+    async def run_incoming(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> tuple[int, int]:
+        """Handle an inbound forwarding connection (called side).
+
+        The caller is responsible for accepting the TCP connection and
+        passing the reader/writer here.  Returns (msgs_sent, msgs_received).
+        """
+        self._reader = reader
+        self._writer = writer
+        try:
+            await self._run(caller=False)
+        finally:
+            await self._close()
+        return self._sent, self._received
+
     # ------------------------------------------------------------------
     # Core session logic
     # ------------------------------------------------------------------
@@ -135,7 +153,18 @@ class ForwardSession:
             self._use_b2f = False
 
         if caller:
-            # Caller sends prompt ">"; called side sends it first
+            # Caller waits for ">" prompt from the called side
+            while True:
+                line = await self._readline()
+                if not line:
+                    LOG.warning("forward: no prompt from %s, aborting",
+                                self._neighbor.call)
+                    return
+                if line.strip() == ">":
+                    break
+                LOG.debug("forward: (pre-prompt) %r", line[:60])
+        else:
+            # Called side sends ">" to invite the caller to begin proposals
             await self._writeline(">")
 
         # 2. Collect outgoing proposals (messages to send to this neighbor)

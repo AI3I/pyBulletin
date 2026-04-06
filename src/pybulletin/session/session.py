@@ -314,7 +314,7 @@ class BBSSession:
                 continue
 
             verb = line.split()[0].upper()
-            if verb in ("B", "BYE", "Q", "QUIT"):
+            if verb in ("B", "BYE", "Q", "QUIT", "G", "GB", "GE"):
                 break
 
             try:

@@ -1,4 +1,4 @@
-"""BBS command engine — Phase 2 + Phase 6 command set.
+"""BBS command engine.
 
 All commands operate via the BBSSession interface so they are
 transport-agnostic.  Each handler is an async method that sends
@@ -19,6 +19,7 @@ Command set:
   LY                 — list read messages
   L> n               — list from message n
   N                  — new message summary, advance msg_base
+  RA                 — read all new personal mail sequentially
   NH [name]          — set display name
   NL [locator]       — set locator / QTH
   NQ [city]          — set city / QTH text
@@ -26,7 +27,7 @@ Command set:
   R n [n ...]        — read message(s)
   S / SP to          — send personal mail (interactive compose)
   SB to              — send bulletin
-  ST to              — send NTS traffic
+  ST / SN to         — send NTS traffic
   SC n call[@bbs]    — copy message to another recipient
   K n [n ...]        — kill message(s)
   KM                 — kill all my mail
@@ -35,6 +36,8 @@ Command set:
   W                  — who / connections
   J                  — heard stations (RF channel only)
   P call             — white pages lookup (alias for I <call>)
+  F [neighbor]       — trigger forward to neighbor (sysop only)
+  G / GB / GE        — goodbye (same as B)
   SH n [n ...]       — sysop: hold message(s)          [sysop]
   SR n [n ...]       — sysop: release held message(s)  [sysop]
   U [search]         — sysop: list users               [sysop]
@@ -91,8 +94,9 @@ class CommandEngine:
             "INFO":    self._cmd_info,
             "P":       self._cmd_wp,
             "WP":      self._cmd_wp,
-            # Message browsing
+            # Message browsing / reading
             "N":       self._cmd_new,
+            "RA":      self._cmd_read_all,
             "L":       self._cmd_list,
             "LL":      self._cmd_list_last,
             "LM":      self._cmd_list_mine,
@@ -110,6 +114,7 @@ class CommandEngine:
             "SP":      self._cmd_send_private,
             "SB":      self._cmd_send_bulletin,
             "ST":      self._cmd_send_nts,
+            "SN":      self._cmd_send_nts,           # FBB alias
             "SC":      self._cmd_copy_message,
             # Kill
             "K":       self._cmd_kill,
@@ -120,6 +125,8 @@ class CommandEngine:
             "NL":      self._cmd_nl,
             "NQ":      self._cmd_nq,
             "NZ":      self._cmd_nz,
+            # Forwarding (sysop)
+            "F":       self._cmd_forward,
             # Status
             "W":       self._cmd_who,
             "J":       self._cmd_heard,
@@ -199,11 +206,12 @@ class CommandEngine:
         "HELP": "H", "VERSION": "V",
         "LL": "L", "LM": "L", "LP": "L", "LB": "L", "LT": "L",
         "LH": "L", "LK": "L", "LF": "L", "LY": "L",
-        "SC": "S",
+        "SC": "S", "SN": "S",
         "KM": "K",
         "MH": "SH", "MR": "SR",
         "YG": "Y", "YU": "Y", "YL": "Y",
         "NH": "N", "NL": "N", "NQ": "N", "NZ": "N",
+        "RA": "R",
         "P": "I",
     }
 
@@ -316,6 +324,27 @@ class CommandEngine:
         if msgs:
             self._user.msg_base = max(m.id for m in msgs)
             await self._store.upsert_user(self._user)
+
+    # ------------------------------------------------------------------
+    # RA — read all new personal mail sequentially
+    # ------------------------------------------------------------------
+
+    async def _cmd_read_all(self, args: str) -> None:
+        """RA — read all new personal mail addressed to me, then kill each."""
+        if not self._can(CAP_READ):
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+
+        msgs = await self._store.list_messages(
+            to_call=self._user.call,
+            status=STATUS_NEW,
+        )
+        if not msgs:
+            await self._s.send(self._st.get("list.no_msgs"))
+            return
+
+        for msg in msgs:
+            await self._read_one(msg.id)
 
     # ------------------------------------------------------------------
     # NH [name] — set display name / home BBS
@@ -836,6 +865,53 @@ class CommandEngine:
         await self._store.upsert_user(user)
         await self._s.send("  Password changed successfully.\r\n")
         LOG.info("session: %s changed password", user.call)
+
+    # ------------------------------------------------------------------
+    # F [neighbor] — trigger forwarding session  [sysop]
+    # ------------------------------------------------------------------
+
+    async def _cmd_forward(self, args: str) -> None:
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+
+        fwd_cfg = self._cfg.forward
+        if not fwd_cfg.enabled or not fwd_cfg.neighbors:
+            await self._s.send("\r\n  Forwarding is not configured on this node.\r\n")
+            return
+
+        target = args.strip().upper() if args.strip() else None
+
+        neighbors = [
+            n for n in fwd_cfg.neighbors
+            if n.enabled and (target is None or n.call.upper() == target)
+        ]
+        if not neighbors:
+            if target:
+                await self._s.send(f"\r\n  No enabled neighbor: {target}\r\n")
+            else:
+                await self._s.send("\r\n  No enabled neighbors configured.\r\n")
+            return
+
+        from ..forward.session import ForwardSession
+        total_sent = total_received = 0
+        for neighbor in neighbors:
+            await self._s.send(f"\r\n  Forwarding to {neighbor.call} ...\r\n")
+            sess = ForwardSession(self._cfg, self._store, neighbor)
+            try:
+                sent, received = await sess.run_outgoing()
+                total_sent     += sent
+                total_received += received
+                await self._s.send(
+                    f"  {neighbor.call}: sent {sent}, received {received}\r\n"
+                )
+            except Exception as exc:
+                await self._s.send(f"  {neighbor.call}: failed — {exc}\r\n")
+                LOG.warning("forward: manual F to %s failed: %s", neighbor.call, exc)
+
+        await self._s.send(
+            f"\r\n  Forward complete: {total_sent} sent, {total_received} received.\r\n"
+        )
 
     # ------------------------------------------------------------------
     # W — who / connections

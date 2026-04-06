@@ -151,6 +151,9 @@ class ForwardNeighborConfig:
 @dataclass(slots=True)
 class ForwardConfig:
     enabled: bool = True
+    # TCP port to listen on for inbound forwarding connections (0 = disabled)
+    listen_port: int = 6301
+    listen_host: str = "0.0.0.0"
     neighbors: list[ForwardNeighborConfig] = field(default_factory=list)
 
 
@@ -332,6 +335,10 @@ def _build_forward(d: dict) -> ForwardConfig:
     c = ForwardConfig()
     if "enabled" in d:
         object.__setattr__(c, "enabled", bool(d["enabled"]))
+    if "listen_port" in d:
+        object.__setattr__(c, "listen_port", int(d["listen_port"]))
+    if "listen_host" in d:
+        object.__setattr__(c, "listen_host", str(d["listen_host"]))
     neighbors = [_build_neighbor(n) for n in d.get("neighbor", [])]
     object.__setattr__(c, "neighbors", neighbors)
     return c
