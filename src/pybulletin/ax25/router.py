@@ -122,6 +122,11 @@ class AX25Router:
             await existing.handle_frame(frame)
             return
 
+        # Cancel any lingering task from a previous session with this station
+        old_task = self._session_tasks.pop(src_key, None)
+        if old_task and not old_task.done():
+            old_task.cancel()
+
         # New connection — record which port this station is on
         self._conn_port[src_key] = port
         local  = AX25Address(self._local_addr.callsign, self._local_addr.ssid)

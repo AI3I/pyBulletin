@@ -238,6 +238,7 @@ class AX25Connection:
             self._stop_t1()
             self._state = ConnState.DISCONNECTED
             self._disconnected_event.set()
+            await self._rx_queue.put(b"")   # wake blocked reader
             LOG.info("ax25: disconnected from %s (clean)", self._remote)
         else:
             LOG.debug("ax25: unexpected UA from %s in state %s", self._remote, self._state)
@@ -253,6 +254,7 @@ class AX25Connection:
         old_state = self._state
         self._state = ConnState.DISCONNECTED
         self._disconnected_event.set()
+        await self._rx_queue.put(b"")   # wake blocked reader
         if old_state == ConnState.CONNECTED:
             LOG.info("ax25: remote %s disconnected", self._remote)
 
@@ -265,6 +267,7 @@ class AX25Connection:
         self._stop_t3()
         self._state = ConnState.DISCONNECTED
         self._disconnected_event.set()
+        await self._rx_queue.put(b"")   # wake blocked reader
         LOG.info("ax25: DM from %s — link refused/closed", self._remote)
 
     # ------------------------------------------------------------------
@@ -423,6 +426,7 @@ class AX25Connection:
             if self._retry_count > _MAX_RETRIES:
                 self._state = ConnState.DISCONNECTED
                 self._disconnected_event.set()
+                await self._rx_queue.put(b"")   # wake blocked reader
                 return
             await self._send(AX25Frame.disc(self._make_dest(), self._make_src()))
             self._start_t1()
@@ -466,6 +470,8 @@ class AX25Connection:
         self._stop_t3()
         self._state = ConnState.DISCONNECTED
         self._disconnected_event.set()
+        # Wake any blocked reader so the session can notice the disconnect
+        await self._rx_queue.put(b"")
 
     # ------------------------------------------------------------------
     # Helpers

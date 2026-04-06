@@ -113,7 +113,7 @@ class AX25Writer:
         asyncio.create_task(self._conn.disconnect())
 
     async def wait_closed(self) -> None:
-        pass  # disconnect is fire-and-forget here
+        await self._conn._disconnected_event.wait()
 
     @property
     def peer(self) -> str:
