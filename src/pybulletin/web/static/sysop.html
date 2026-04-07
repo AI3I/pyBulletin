@@ -15,7 +15,8 @@
     <button onclick="showView('messages')"   id="nav-messages">Messages</button>
     <button onclick="showView('users')"      id="nav-users">Users</button>
     <button onclick="showView('neighbors')"  id="nav-neighbors">Neighbors</button>
-    <button onclick="showView('config')"     id="nav-config">Configuration</button>
+    <button onclick="showView('config')"      id="nav-config">Configuration</button>
+    <button onclick="showView('conference')"  id="nav-conference">Conference</button>
   </div>
   <div class="nav-right">
     <div class="ws-indicator" id="ws-indicator">
@@ -366,6 +367,17 @@
       <button class="btn btn-primary" onclick="saveConfig()">Save</button>
       <button class="btn btn-ghost" onclick="loadConfig()">Reset</button>
     </div>
+  </div>
+</div>
+
+<!-- CONFERENCE MONITOR -->
+<div class="view" id="view-conference">
+  <div class="section-header">
+    <h2>Conference Rooms</h2>
+    <button class="btn btn-ghost btn-sm" onclick="loadConference()">Refresh</button>
+  </div>
+  <div id="conference-body">
+    <p class="empty-state">Loading…</p>
   </div>
 </div>
 

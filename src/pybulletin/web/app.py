@@ -66,12 +66,13 @@ _STATIC_DIR = Path(__file__).parent / "static"
 class WebApp:
     """Request router and WebSocket hub for the pyBulletin web interface."""
 
-    def __init__(self, cfg: AppConfig, store: BBSStore) -> None:
-        self._cfg   = cfg
-        self._store = store
-        self._sessions = SessionStore()
+    def __init__(self, cfg: AppConfig, store: BBSStore, conference_hub=None) -> None:
+        self._cfg         = cfg
+        self._store       = store
+        self._conf_hub    = conference_hub
+        self._sessions    = SessionStore()
         self._ws_clients: set[WebSocket] = set()
-        self._ws_lock = asyncio.Lock()
+        self._ws_lock     = asyncio.Lock()
 
     def start(self) -> None:
         self._sessions.start()
@@ -165,6 +166,8 @@ class WebApp:
             return await self._get_config(req, sess)
         if m == "POST" and p == "/api/config":
             return await self._set_config(req, sess)
+        if m == "GET" and p == "/api/conference":
+            return await self._conference_status(req, sess)
 
         return None
 
@@ -700,6 +703,16 @@ class WebApp:
             "recent_logins":   recent_logins,
             "neighbors":       neighbors_out,
         })
+
+    async def _conference_status(self, req: HTTPRequest, sess) -> HTTPResponse:
+        if sess is None or not sess.is_sysop:
+            return HTTPResponse.forbidden()
+        if self._conf_hub is None:
+            return HTTPResponse.json({"available": False, "rooms": {}})
+        snapshot = self._conf_hub.rooms_snapshot()
+        rooms_out = {name: {"members": members, "count": len(members)}
+                     for name, members in snapshot.items()}
+        return HTTPResponse.json({"available": True, "rooms": rooms_out})
 
     async def _get_config(self, req: HTTPRequest, sess) -> HTTPResponse:
         if sess is None or not sess.is_sysop:

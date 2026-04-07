@@ -115,6 +115,7 @@ function showView(name) {
   const loaders = {
     dashboard: loadDashboard, messages: loadMessages,
     users: loadUsers, neighbors: loadNeighbors, config: loadConfig,
+    conference: loadConference,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -719,3 +720,39 @@ function applyTheme() {
   const saved = localStorage.getItem("pb_theme");
   if (saved) document.documentElement.setAttribute("data-theme", saved);
 }
+
+// ---------------------------------------------------------------------------
+// Conference monitor
+// ---------------------------------------------------------------------------
+let _confInterval = null;
+
+async function loadConference() {
+  if (!SESSION) return;
+  const body = document.getElementById("conference-body");
+  const data = await apiFetch("/api/conference");
+  if (!data) return;
+  if (!data.available) {
+    body.innerHTML = '<p class="empty-state">Conference monitor requires co-located serve-core and serve-web processes.</p>';
+    return;
+  }
+  const rooms = data.rooms;
+  const names = Object.keys(rooms).sort();
+  if (names.length === 0) {
+    body.innerHTML = '<p class="empty-state">No active conference rooms.</p>';
+    return;
+  }
+  let html = '<table class="data-table"><thead><tr><th>Room</th><th>Participants</th><th>Count</th></tr></thead><tbody>';
+  for (const name of names) {
+    const r = rooms[name];
+    html += `<tr><td>${esc(name)}</td><td>${r.members.map(esc).join(", ")}</td><td>${r.count}</td></tr>`;
+  }
+  html += "</tbody></table>";
+  body.innerHTML = html;
+}
+
+// Auto-refresh conference view every 10s when active
+setInterval(() => {
+  if (document.getElementById("view-conference")?.classList.contains("active")) {
+    loadConference();
+  }
+}, 10000);

@@ -42,7 +42,7 @@ async def _serve_core(config_path: str) -> None:
     from .transport.telnet import TelnetServer
     from .transport.kiss_tcp import KissTcpLink
     from .transport.kiss_serial import KissSerialLink
-    from .transport.conference import ConferenceHub
+    from .transport.conference import ConferenceHubManager
     from .ax25.router import AX25Router
     from .ax25.beacon import BeaconTask
     from .session.session import BBSSession
@@ -52,7 +52,7 @@ async def _serve_core(config_path: str) -> None:
 
     store   = BBSStore(cfg.store.sqlite_path)
     strings = StringCatalog("config/strings.toml")
-    conf_hub = ConferenceHub()
+    conf_hub = ConferenceHubManager()
 
     # --- Telnet / TCP transport ---
     async def _session_handler(reader, writer, meta):
@@ -152,7 +152,7 @@ async def _serve_core(config_path: str) -> None:
         if kiss_link:
             await kiss_link.send_frame(frame, port)
 
-    router = AX25Router(cfg, store, strings, _send_ax25)
+    router = AX25Router(cfg, store, strings, _send_ax25, conference_hub=conf_hub)
 
     kiss = cfg.kiss
     if kiss.device:

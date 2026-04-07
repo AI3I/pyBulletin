@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..store.models import User
     from ..strings import StringCatalog
     from ..transport.telnet import TelnetReader, TelnetWriter, ConnectionMeta
-    from ..transport.conference import ConferenceHub
+    from ..transport.conference import ConferenceHubManager as ConferenceHub
 
 LOG = logging.getLogger(__name__)
 

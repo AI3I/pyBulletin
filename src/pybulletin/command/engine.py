@@ -1932,13 +1932,15 @@ class CommandEngine:
             await self._s.send("\r\n  Conference not available on this node.\r\n")
             return
 
+        room = args.strip() or hub.DEFAULT_ROOM
+
         async def _send(text: str) -> None:
             await self._s.send(text)
 
         async def _read() -> str:
             return await self._s._readline()
 
-        await hub.run_session(self._user.call, _read, _send)
+        await hub.enter_room(room, self._user.call, _read, _send)
 
     # ------------------------------------------------------------------
     # Helpers

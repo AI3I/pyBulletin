@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from ..config import AppConfig
     from ..store.store import BBSStore
     from ..strings import StringCatalog
+    from ..transport.conference import ConferenceHubManager
 
 LOG = logging.getLogger(__name__)
 
@@ -58,11 +59,13 @@ class AX25Router:
         store: BBSStore,
         strings: StringCatalog,
         send_frame_cb: SendFrameCb,
+        conference_hub: ConferenceHubManager | None = None,
     ) -> None:
-        self._cfg     = cfg
-        self._store   = store
-        self._strings = strings
-        self._send_cb = send_frame_cb
+        self._cfg      = cfg
+        self._store    = store
+        self._strings  = strings
+        self._send_cb  = send_frame_cb
+        self._conf_hub = conference_hub
 
         self._local_addr = AX25Address.parse(cfg.node.node_call)
         # Active connections keyed by remote callsign string
@@ -168,6 +171,7 @@ class AX25Router:
         session = BBSSession(
             reader, writer, meta, self._cfg, self._store, self._strings,
             heard_provider=lambda: router_ref.heard_stations,
+            conference_hub=self._conf_hub,
         )
         try:
             await session.run()
