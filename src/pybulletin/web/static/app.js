@@ -309,17 +309,11 @@ async function loadProfile() {
     const ls = u.last_seen ? new Date(u.last_seen*1000).toLocaleString() : "never";
     const ll = u.last_login_at ? new Date(u.last_login_at*1000).toLocaleString() : "never";
     card.innerHTML = `
-      <div class="stat-grid" style="margin-bottom:.75rem">
-        <div class="stat-box"><div class="stat-value" style="font-size:1.1rem">${escHtml(u.call)}</div>
-          <div class="stat-label">Callsign</div></div>
-        <div class="stat-box"><div class="stat-value" style="font-size:1rem">${escHtml(u.privilege||'user')}</div>
-          <div class="stat-label">Privilege</div></div>
-        <div class="stat-box"><div class="stat-value" style="font-size:1rem">${u.msg_base}</div>
-          <div class="stat-label">Msg Base</div></div>
-        <div class="stat-box"><div class="stat-value" style="font-size:1rem">${u.page_length||'off'}</div>
-          <div class="stat-label">Page Length</div></div>
-      </div>
       <table><tbody>
+        <tr><th>Callsign</th><td class="mono">${escHtml(u.call)}</td></tr>
+        <tr><th>Privilege</th><td>${escHtml(u.privilege||'user')}</td></tr>
+        <tr><th>Msg Base</th><td>${u.msg_base}</td></tr>
+        <tr><th>Page Length</th><td>${u.page_length||'off'}</td></tr>
         <tr><th>Home BBS</th><td class="mono">${escHtml(u.home_bbs||'—')}</td></tr>
         <tr><th>Locator</th><td class="mono">${escHtml(u.locator||'—')}</td></tr>
         <tr><th>City</th><td>${escHtml(u.city||'—')}</td></tr>
