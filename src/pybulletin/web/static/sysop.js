@@ -524,6 +524,7 @@ function renderNeighbors(nbrs) {
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="editNeighbor(${JSON.stringify(n).replace(/"/g,'&quot;')})">Edit</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleNeighbor('${call}',${!n.enabled})">${n.enabled?'Disable':'Enable'}</button>
+        ${n.enabled ? `<button class="btn btn-primary btn-sm" onclick="connectNeighbor('${call}')">Connect</button>` : ''}
         <button class="btn btn-danger btn-sm" onclick="deleteNeighbor('${call}')">Delete</button>
       </td>
     </tr>`;
@@ -617,6 +618,19 @@ async function deleteNeighbor(call) {
   try {
     await apiFetch(`/api/neighbors/${call}`, { method: "DELETE" });
     toast(`Neighbor ${call} removed.`, "success");
+    loadNeighbors();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function connectNeighbor(call) {
+  toast(`Connecting to ${call}…`, "info");
+  try {
+    const r = await apiFetch(`/api/neighbors/${call}/connect`, { method: "POST" });
+    if (r.ok) {
+      toast(`${call} — sent ${r.sent}, received ${r.received}.`, "success");
+    } else {
+      toast(`${call}: ${r.error || "failed"}`, "error");
+    }
     loadNeighbors();
   } catch (e) { toast(e.message, "error"); }
 }

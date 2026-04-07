@@ -156,6 +156,9 @@ class WebApp:
                 return await self._update_neighbor(req, sess, ncall)
             if m == "DELETE":
                 return await self._delete_neighbor(req, sess, ncall)
+        nbr_connect_m = re.fullmatch(r"/api/neighbors/([A-Za-z0-9\-]+)/connect", p)
+        if nbr_connect_m and m == "POST":
+            return await self._connect_neighbor(req, sess, nbr_connect_m.group(1).upper())
 
         # Config, wp, stats
         if m == "GET" and p == "/api/wp":
@@ -685,6 +688,25 @@ class WebApp:
         self._save_config_async()
         LOG.info("web: %s deleted neighbor %s", sess.call, call)
         return HTTPResponse.json({"ok": True})
+
+    async def _connect_neighbor(self, req: HTTPRequest, sess, call: str) -> HTTPResponse:
+        if sess is None or not sess.is_sysop:
+            return HTTPResponse.forbidden()
+        neighbor = next(
+            (n for n in self._cfg.forward.neighbors if n.call == call and n.enabled),
+            None,
+        )
+        if neighbor is None:
+            return HTTPResponse.not_found()
+        from ..forward.session import ForwardSession
+        LOG.info("web: %s triggered immediate forward session with %s", sess.call, call)
+        session = ForwardSession(self._cfg, self._store, neighbor)
+        try:
+            sent, received = await session.run_outgoing()
+        except Exception as exc:
+            LOG.warning("web: immediate forward to %s failed: %s", call, exc)
+            return HTTPResponse.json({"ok": False, "error": str(exc)}, status=502)
+        return HTTPResponse.json({"ok": True, "sent": sent, "received": received})
 
     async def _wp_lookup(self, req: HTTPRequest, sess) -> HTTPResponse:
         if sess is None:
