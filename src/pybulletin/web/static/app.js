@@ -409,8 +409,19 @@ function confSend() {
   const input = document.getElementById("conf-input");
   const text  = input.value.trim();
   if (!text || !WS || WS.readyState !== WebSocket.OPEN) return;
-  WS.send(JSON.stringify({ type: "conference_message", text }));
   input.value = "";
+
+  const upper = text.toUpperCase();
+  // Handle in-conference / commands from the web input too
+  if (upper === "/X" || upper === "/Q" || upper === "/EXIT") {
+    confLeave(); return;
+  }
+  if (upper.startsWith("/J ") || upper.startsWith("/JOIN ")) {
+    const room = text.split(/\s+/, 2)[1] || "";
+    if (room) { confLeave(); setTimeout(() => { document.getElementById("conf-room").value = room; confJoin(); }, 100); }
+    return;
+  }
+  WS.send(JSON.stringify({ type: "conference_message", text }));
 }
 
 function confOnJoined(room, welcome) {

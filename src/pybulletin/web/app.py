@@ -185,7 +185,8 @@ class WebApp:
         async with self._ws_lock:
             self._ws_clients.add(ws)
 
-        conf_room: str | None   = None
+        conf_room: str | None        = None
+        conf_key:  str | None        = None
         drain_task: asyncio.Task | None = None
 
         async def _drain(queue: asyncio.Queue) -> None:
@@ -195,9 +196,9 @@ class WebApp:
                 await ws.send_json({"type": "conference_message", "text": text})
 
         async def _leave_conf() -> None:
-            nonlocal conf_room, drain_task
-            if conf_room and self._conf_hub:
-                await self._conf_hub.leave_room_ws(conf_room, sess.call)
+            nonlocal conf_room, conf_key, drain_task
+            if conf_room and conf_key and self._conf_hub:
+                await self._conf_hub.leave_room_ws(conf_room, conf_key)
             if drain_task:
                 drain_task.cancel()
                 try:
@@ -205,7 +206,19 @@ class WebApp:
                 except asyncio.CancelledError:
                     pass
             conf_room  = None
+            conf_key   = None
             drain_task = None
+
+        async def _join_conf(room_name: str) -> None:
+            nonlocal conf_room, conf_key, drain_task
+            if not self._conf_hub:
+                return
+            key, queue, welcome = await self._conf_hub.enter_room_ws(room_name, sess.call)
+            conf_room  = room_name
+            conf_key   = key
+            drain_task = asyncio.create_task(_drain(queue))
+            await ws.send_json({"type": "conference_joined",
+                                "room": room_name, "welcome": welcome})
 
         try:
             await ws.send_json({
@@ -229,15 +242,11 @@ class WebApp:
                     if conf_room:
                         await _leave_conf()
                     room = data.get("room") or self._conf_hub.DEFAULT_ROOM
-                    queue, welcome = await self._conf_hub.enter_room_ws(room, sess.call)
-                    conf_room  = room
-                    drain_task = asyncio.create_task(_drain(queue))
-                    await ws.send_json({"type": "conference_joined",
-                                        "room": room, "welcome": welcome})
-                elif t == "conference_message" and conf_room and self._conf_hub:
+                    await _join_conf(room)
+                elif t == "conference_message" and conf_room and conf_key and self._conf_hub:
                     text = str(data.get("text", "")).strip()
                     if text:
-                        await self._conf_hub.send_from_ws(conf_room, sess.call, text)
+                        await self._conf_hub.send_from_ws(conf_room, conf_key, text)
                 elif t == "conference_leave":
                     await _leave_conf()
                     await ws.send_json({"type": "conference_left"})
