@@ -67,12 +67,12 @@ short = """\r
           ME     My profile (WHOAMI)\r
  Other    C      Conference chat              T      Page system operator\r
           Y/YL   YAPP file list               B      Bye/disconnect\r
- SYSOP    SH/SR  Hold/release msg [sysop]     ED/EM  Edit message   [sysop]\r
-          MOVE   Reassign recip  [sysop]      $      Msg status     [sysop]\r
-          KK     Bulk kill type  [sysop]      K>/K<  Kill by from/to[sysop]\r
-          K@     Kill msgs@BBS   [sysop]      U/DU   List/view user [sysop]\r
-          DS/EU  Sysop list/edit [sysop]      IL/IE  WP view/edit   [sysop]\r
-          F/FL   Forward/queue   [sysop]      FN/FD  Path/drop fwd  [sysop]\r
+ SYSOP    SH/SR  Hold / release message       ED/EM  Edit subject / body\r
+          MOVE   Reassign recipient           $      Message status / path\r
+          KK     Bulk kill by type            K>/K<  Kill by from / to call\r
+          K@     Kill messages at BBS         U/DU   List / view user\r
+          DS/EU  Sysop users / edit user      IL/IE  WP record view / edit\r
+          F/FL   Forward / list fwd queue     FN/FD  Fwd path / drop entry\r
 ?<cmd> detail  e.g. ?L ?S ?K ?F ?U ?IL\r
 """
 
