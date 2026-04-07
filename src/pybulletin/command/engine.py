@@ -148,7 +148,6 @@ class CommandEngine:
             "FL": self._cmd_forward_list,
             "FN": self._cmd_forward_path,
             "FD": self._cmd_forward_drop,
-            "FS": self._cmd_forward_stop,
             # Sysop message management
             "$":  self._cmd_msg_status,
             "EM": self._cmd_edit_body,
@@ -1600,21 +1599,6 @@ class CommandEngine:
         await self._store.append_forward_path(msg_id, bbs)
         await self._s.send(f"\r\n  Msg {msg_id} marked as already forwarded to {bbs}.\r\n")
         LOG.info("session: sysop %s dropped fwd of msg %d to %s", self._user.call, msg_id, bbs)
-
-    async def _cmd_forward_start(self, args: str) -> None:
-        """FW [bbs] — manually start a forwarding session."""
-        # Alias to F — reuse existing handler
-        await self._cmd_forward(args)
-
-    async def _cmd_forward_stop(self, args: str) -> None:
-        """FS — placeholder; forwarding sessions are short-lived TCP connections."""
-        if self._user.privilege != PRIV_SYSOP:
-            await self._s.send(self._st.get("error.no_permission"))
-            return
-        await self._s.send(
-            "\r\n  Forwarding sessions are short-lived; there is nothing to stop.\r\n"
-            "  Use F to start a session or check the forward scheduler logs.\r\n"
-        )
 
     # ------------------------------------------------------------------
     # SH / MH — sysop hold message(s)

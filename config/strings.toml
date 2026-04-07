@@ -36,12 +36,12 @@ locked_out     = "\r\n? Access denied.\r\n"
 [help]
 compact = """\r
 Commands (?<cmd>=detail  ??=full list):\r
- List: L  LL LM LB LN LR LW LS LD LH LF LK\r
+ List: L  LL LM LB LN LR LW LS LD LH LF LK LT LY\r
  Read: R  RA RP\r
  Send: S  SB ST SC\r
  Mgmt: K  KM N  NH NL NQ NZ NB O  X\r
- Info: I  P  WS  W  V  J  C  T  Y  ME NS DT BB\r
- Exit: B\r
+ Info: I  P  WS  W  V  J  ME NS DT BB\r
+ Misc: C  T  Y\r
 """
 
 short = """\r
@@ -51,6 +51,7 @@ short = """\r
           LW     Worldwide bulletins          LS     Search msgs\r
           LD     Since date (MMDD)            LH     Held messages\r
           LK     Killed messages              LF     Forwarded messages\r
+          LT     NTS/radiogram traffic        LY     Already-read messages\r
           R      Read message(s)              RA     Read all new mail\r
           RP     Reply to message             N      New msg count/advance\r
  Sending  S/SP   Send personal mail           SB     Send bulletin [cat]\r
@@ -72,7 +73,7 @@ short = """\r
           KK     Bulk kill by type            K>/K<  Kill by from / to call\r
           K@     Kill messages at BBS         U/DU   List / view user\r
           DS/EU  Sysop users / edit user      IL/IE  WP record view / edit\r
-          F/FL   Forward / list fwd queue     FN/FD  Fwd path / drop entry\r
+          F/FL   Forward / list fwd queue     FN/FD  Fwd path / drop fwd\r
 ?<cmd> detail  e.g. ?L ?S ?K ?F ?U ?IL\r
 """
 
@@ -225,11 +226,9 @@ EU <call>      edit user record (name, home BBS, privilege, etc.)  [SYSOP]\r
 
 F = """\r
 F [call]       trigger outbound forwarding to all (or one) neighbor  [SYSOP]\r
-FW [call]      same as F — start forwarding session\r
 FL [bbs]       list messages pending forwarding  [SYSOP]\r
 FN n           show which BBSes message n has been forwarded to  [SYSOP]\r
 FD n <bbs>     mark message n as already forwarded to <bbs>  [SYSOP]\r
-FS             show forwarding session status  [SYSOP]\r
 """
 
 IL = """\r
