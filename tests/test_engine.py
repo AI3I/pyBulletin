@@ -71,7 +71,7 @@ async def test_help_alias(fake_session):
 
 async def test_question_mark_help(fake_session):
     out = await _dispatch(fake_session, "?")
-    assert "Commands" in out
+    assert "[L]" in out
 
 
 async def test_double_question_mark_help(fake_session):
