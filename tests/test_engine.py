@@ -76,7 +76,7 @@ async def test_question_mark_help(fake_session):
 
 async def test_double_question_mark_help(fake_session):
     out = await _dispatch(fake_session, "??")
-    assert "Reading" in out
+    assert "sysop" in out.lower()
 
 
 async def test_help_detail(fake_session):

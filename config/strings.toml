@@ -40,7 +40,7 @@ Commands (?<cmd>=detail  ??=full list):\r
  Read: R  RA RP\r
  Send: S  SB ST SC\r
  Mgmt: K  KM N  NH NL NQ NZ NB O  X\r
- Info: I  P  WPS W  V  J  C  T  Y\r
+ Info: I  P  WS  W  V  J  C  T  Y  ME NS DT BB\r
  Exit: B\r
 """
 
@@ -60,10 +60,10 @@ short = """\r
   NQ     Set QTH/city                  NZ     Set ZIP code\r
   NB     Set home BBS                  O      Options (pager/pw/etc)\r
   X      Toggle expert mode            I/P    Node info / WP lookup\r
-  WPS    Search white pages            W      Who is connected\r
+  WS/WPS Search white pages            W      Who is connected\r
   V      Software version              J      Heard stations (RF)\r
-  BBS    Neighbor nodes                DATE   Current UTC time\r
-  STATS  Node statistics               WHOAMI My profile\r
+  BB/BBS Neighbor nodes                DT     Current UTC time\r
+  NS     Node statistics               ME     My profile (WHOAMI)\r
   C      Conference chat               T      Page system operator\r
   Y/YL   YAPP file list                B      Bye/disconnect\r
   SH/SR  Hold/release msg   [sysop]    ED/EM  Edit message   [sysop]\r

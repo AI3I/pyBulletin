@@ -166,15 +166,20 @@ class CommandEngine:
             # Status / info
             "DATE":    self._cmd_datetime,
             "TIME":    self._cmd_datetime,
+            "DT":      self._cmd_datetime,           # short alias
             "STATS":   self._cmd_stats,
+            "NS":      self._cmd_stats,              # short alias
             "WHOAMI":  self._cmd_whoami,
+            "ME":      self._cmd_whoami,             # short alias
             "X":       self._cmd_expert_toggle,
             "BBS":     self._cmd_bbs_list,
+            "BB":      self._cmd_bbs_list,           # short alias
             "WHO":     self._cmd_who,                # long form alias
             "W":       self._cmd_who,
             "J":       self._cmd_heard,
             # WP search
             "WPS":     self._cmd_wp_search,
+            "WS":      self._cmd_wp_search,          # short alias
             # Sysop
             "SH":      self._cmd_sysop_hold,
             "MH":      self._cmd_sysop_hold,     # FBB alias
@@ -266,11 +271,11 @@ class CommandEngine:
         "YG": "Y", "YU": "Y", "YL": "Y",
         "NH": "N", "NL": "N", "NQ": "N", "NZ": "N", "NB": "N",
         "RA": "R",
-        "P": "I", "WPS": "I", "BBS": "I",
+        "P": "I", "WPS": "I", "WS": "I", "BBS": "I", "BB": "I",
         "IL": "IL", "IE": "IL",
-        "WHO": "W", "WHOAMI": "W",
-        "DATE": "V", "TIME": "V",
-        "STATS": "V",
+        "WHO": "W", "WHOAMI": "W", "ME": "W",
+        "DATE": "V", "TIME": "V", "DT": "V",
+        "STATS": "V", "NS": "V",
         "X": "O",
         "DU": "U", "DS": "U", "EU": "U",
         "FL": "F", "FN": "F", "FD": "F", "FW": "F", "FS": "F",
