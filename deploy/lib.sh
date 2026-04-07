@@ -227,13 +227,17 @@ ensure_selinux_contexts() {
 sync_tree() {
   local root
   root="$(repo_root)"
+  # Sync everything except node-specific config, data, and logs.
+  # strings.toml is part of the software and IS updated on every upgrade.
+  # pybulletin.toml (node config) is protected by install_config_if_missing.
   rsync -a \
     --delete \
     --exclude '.git/' \
     --exclude '.pytest_cache/' \
     --exclude '__pycache__/' \
     --exclude '*.pyc' \
-    --exclude 'config/' \
+    --exclude 'config/pybulletin.toml' \
+    --exclude 'config/pybulletin.local.toml' \
     --exclude 'data/' \
     --exclude 'logs/' \
     "$root"/ "$PYBULLETIN_APP_DIR"/
