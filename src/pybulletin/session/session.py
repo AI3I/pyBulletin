@@ -293,21 +293,20 @@ class BBSSession:
 
         while True:
             # Build prompt — sysop gets '#', regular user gets '>'
-            is_sysop = self._user.privilege == "sysop"
+            prompt_char = "#" if self._user.privilege == "sysop" else ">"
             if self._user.expert_mode:
-                key = "connect.prompt_sysop_expert" if is_sysop else "connect.prompt_expert"
-                prompt = s.get(key, node_call=cfg.node.node_call)
+                prompt = s.get("connect.prompt_expert",
+                               node_call=cfg.node.node_call,
+                               prompt_char=prompt_char)
             else:
                 new = await self._store.count_messages(
                     to_call=self._user.call, status="N"
                 )
                 suffix = f"({new})" if new else ""
-                key = "connect.prompt_sysop" if is_sysop else "connect.prompt"
-                prompt = s.get(
-                    key,
-                    node_call=cfg.node.node_call,
-                    suffix=suffix,
-                )
+                prompt = s.get("connect.prompt",
+                               node_call=cfg.node.node_call,
+                               prompt_char=prompt_char,
+                               suffix=suffix)
 
             await self.send(prompt)
             line = await self._readline()
