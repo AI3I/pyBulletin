@@ -6,7 +6,7 @@ A modern packet radio BBS written in Python, compatible with FBB/LinFBB clients 
 
 ## Features
 
-- **FBB-compatible command set** — full L/S/R/K family plus RA, RP, LS, LD, LN, LR, LW, NB, NH, MOVE, ED, STATS, WHOAMI, BBS, WPS, DATE, X, and more
+- **FBB-compatible command set** — full L/S/R/K family plus RA, RP, LS, LD, LN, LR, LW, NB, NH, MV, ED, NS, ME, BB, WS, DT, X, and more
 - **Telnet access** — multi-client asyncio server, configurable idle timeout and rate limits
 - **AX.25 / KISS transport** — modulo-8 windowed I-frame connections over serial or TCP KISS TNC (Dire Wolf, soundmodem)
 - **B2F forwarding** — outbound and inbound store-and-forward with LZHUF compression; falls back to B1 for older nodes
@@ -70,6 +70,7 @@ sudo bash deploy/uninstall.sh
 
 | Script | Purpose |
 |--------|---------|
+| `deploy/strings.sh` | Push `strings.toml` only — hot-reloads in ≤30s, no restart needed |
 | `deploy/setup-nginx.sh` | Configure nginx as reverse proxy for the web interfaces |
 | `deploy/doctor.sh` | Diagnose common configuration and permission problems |
 | `deploy/migrate.sh` | Run schema migrations on an existing database |
@@ -311,7 +312,8 @@ End a message with `/EX` or `Ctrl-Z`. Abort with `/AB`.
 
 | Command | Description |
 |---------|-------------|
-| `K n [n …]` / `D` / `KILL` / `RM` | Kill (delete) message(s) you own |
+| `K n [n …]` / `D` / `RM` | Kill (delete) message(s) you own |
+| `K> call` / `K< call` / `K@ bbs` | Kill all to / from / at a callsign |
 | `KM` | Kill all your personal mail |
 
 ### Profile / Options
@@ -335,15 +337,15 @@ End a message with `/EX` or `Ctrl-Z`. Abort with `/AB`.
 | Command | Description |
 |---------|-------------|
 | `I [call]` / `P [call]` | Node info or White Pages lookup |
-| `WPS <name>` | Search White Pages by name or partial callsign |
-| `W` / `WHO` | Show connected sessions |
-| `WHOAMI` | Show your callsign, privilege, and profile |
-| `DATE` / `TIME` | Current UTC date and time |
-| `STATS` | Node statistics |
-| `BBS` | List configured neighbor nodes |
-| `H` / `?` | Help |
+| `WS <name>` | Search White Pages by name or partial callsign |
+| `W` | Show connected sessions |
+| `ME` | Show your callsign, privilege, and profile |
+| `DT` | Current UTC date and time |
+| `NS` | Node statistics |
+| `BB` | List configured neighbor nodes |
+| `H` / `?` | Help (`??` for full, `?X` for command detail) |
 | `V` | Version info |
-| `G` / `GB` / `GE` / `B` / `BYE` / `Q` | Disconnect |
+| `G` / `GB` / `GE` / `Q` | Disconnect |
 
 ### Sysop Commands
 
@@ -352,7 +354,7 @@ End a message with `/EX` or `Ctrl-Z`. Abort with `/AB`.
 | `SH n [n …]` / `MH` | Hold message(s) |
 | `SR n [n …]` / `MR` | Release held message(s) |
 | `ED n` | Interactively edit subject and body of message *n* |
-| `MOVE n call[@bbs]` | Reassign message to a different recipient / BBS |
+| `MV n call[@bbs]` | Reassign message to a different recipient / BBS |
 | `F [neighbor]` | Trigger outbound forward (all neighbors or one) |
 | `U [search]` | List users |
 
