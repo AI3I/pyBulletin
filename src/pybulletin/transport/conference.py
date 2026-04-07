@@ -101,7 +101,7 @@ class ConferenceRoom:
         members_str = ", ".join(self.members) or "you"
         await send_cb(
             f"\r\n*** Entering room {self.name}.  Members: {members_str}\r\n"
-            f"*** /W=who  /L=rooms  /J room=switch  /X=exit\r\n\r\n"
+            f"*** /W=who  /L=list  /J=join  /X=exit\r\n\r\n"
         )
         await self._broadcast(f"*** {call} has joined {self.name}\r\n", exclude_key=key)
 
@@ -139,7 +139,7 @@ class ConferenceRoom:
         members_str = ", ".join(self.members) or "you"
         welcome = (
             f"*** Entering room {self.name}.  Members: {members_str}\n"
-            f"*** /W=who  /L=rooms  /J room=switch  /X=exit"
+            f"*** /W=who  /L=list  /J=join  /X=exit"
         )
         await self._broadcast(f"*** {call} has joined {self.name}\r\n", exclude_key=key)
         LOG.info("conference[%s]: %s joined via web (%d total)", self.name, call, len(self._parts))
