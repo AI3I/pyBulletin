@@ -100,7 +100,7 @@ function connectWS() {
 
 function setWsStatus(on) {
   document.getElementById("ws-dot").className = "dot " + (on ? "dot-green" : "dot-gray");
-  document.getElementById("ws-label").textContent = on ? "live" : "offline";
+  document.getElementById("ws-label").textContent = on ? "online" : "offline";
 }
 
 // ---------------------------------------------------------------------------

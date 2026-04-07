@@ -112,7 +112,7 @@ function setWsStatus(online) {
   const dot   = document.getElementById("ws-dot");
   const label = document.getElementById("ws-label");
   dot.className   = "dot " + (online ? "dot-green" : "dot-gray");
-  label.textContent = online ? "live" : "offline";
+  label.textContent = online ? "online" : "offline";
 }
 
 // ---------------------------------------------------------------------------
