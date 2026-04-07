@@ -13,10 +13,10 @@
   <div class="nav-links" id="nav-links" style="display:none">
     <button onclick="showView('dashboard')"  id="nav-dashboard">Dashboard</button>
     <button onclick="showView('messages')"   id="nav-messages">Messages</button>
+    <button onclick="showView('conference')" id="nav-conference">Conferences</button>
     <button onclick="showView('users')"      id="nav-users">Users</button>
     <button onclick="showView('neighbors')"  id="nav-neighbors">Neighbors</button>
-    <button onclick="showView('config')"      id="nav-config">Configuration</button>
-    <button onclick="showView('conference')"  id="nav-conference">Conference</button>
+    <button onclick="showView('config')"     id="nav-config">Configuration</button>
   </div>
   <div class="nav-right">
     <div class="ws-indicator" id="ws-indicator">
@@ -373,7 +373,7 @@
 <!-- CONFERENCE MONITOR -->
 <div class="view" id="view-conference">
   <div class="section-header">
-    <h2>Conference Rooms</h2>
+    <h2>Conferences</h2>
     <button class="btn btn-ghost btn-sm" onclick="loadConference()">Refresh</button>
   </div>
   <div id="conference-body">
