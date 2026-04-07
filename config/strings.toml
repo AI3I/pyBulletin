@@ -26,7 +26,7 @@ enter_call     = "\r\nCallsign: "
 enter_password = "Password: "
 bad_call       = "\r\n? Invalid callsign.\r\n"
 bad_password   = "\r\n? Incorrect password.\r\n"
-not_registered = "\r\n? Callsign not registered. Contact the sysop.\r\n"
+not_registered = "\r\n? Callsign not registered. Contact the System Operator (SYSOP).\r\n"
 locked_out     = "\r\n? Access denied.\r\n"
 
 # ---------------------------------------------------------------------------
@@ -35,16 +35,41 @@ locked_out     = "\r\n? Access denied.\r\n"
 
 [help]
 short = """\r
-Commands:\r
-  L   List messages          R   Read messages\r
-  S   Send message           K   Kill message\r
-  N   Set your name/QTH      O   Options\r
-  H   Help                   I   Info / white pages\r
-  B   Bye (disconnect)       ?   Detailed help\r
-  C   Conference chat        T   Page the sysop\r
-  W   List files             D   Download file\r
-  Y   YAPP file transfer     V   Version\r
+ Reading\r
+  L   List messages          LL  List last n msgs\r
+  LM  List my mail           LB  List bulletins\r
+  LN  New since login        LR  List reverse\r
+  LW  List WW bulletins      LS  Search messages\r
+  LD  List since date        LK  List killed\r
+  LH  List held              LF  List forwarded\r
+  R   Read message(s)        RA  Read all new mail\r
+  N   New msg summary\r
 \r
+ Sending\r
+  S   Send personal mail     SB  Send bulletin\r
+  ST  Send NTS traffic       SC  Copy message\r
+  RP  Reply to message\r
+\r
+ Manage\r
+  K   Kill message(s)        KM  Kill all my mail\r
+  NB  Set home BBS           NH  Set display name\r
+  NL  Set locator            NQ  Set QTH / city\r
+  NZ  Set ZIP code           O   Options\r
+  X   Toggle expert mode\r
+\r
+ Info\r
+  I   Node info / WP lookup  P   WP lookup (alias)\r
+  WPS Search white pages     W   Who is connected\r
+  WHOAMI  Show my profile    DATE  Current UTC time\r
+  STATS   Node statistics    BBS   Neighbor nodes\r
+  V   Version                J   Heard stations\r
+\r
+ Other\r
+  C   Conference chat        T   Page the System Operator (SYSOP)\r
+  Y   YAPP file transfer     B   Bye (disconnect)\r
+  H / ?   Help\r
+\r
+System Operator (SYSOP): SH SR ED MOVE F U\r
 Type ?<command> for detailed help, e.g. ?L or ?S\r
 """
 
@@ -61,16 +86,22 @@ H  — show this help summary\r
 """
 
 L = """\r
-L  [n]      list messages from message # n (default: from your base)\r
-LL [n]      list last n messages (default 10)\r
-LM / LP     list your personal mail\r
-LB [cat]    list bulletins, optionally filtered by category (e.g. LB WX)\r
-LT          list NTS/radiogram traffic\r
-LH          list held messages\r
-LK          list killed messages\r
-LF          list forwarded messages\r
-LY          list read (Y) messages\r
-L> n        list starting from message # n\r
+L  [n]         list messages from message # n (default: from your base)\r
+LA             same as L (FBB alias)\r
+LL [n]         list last n messages (default 20)\r
+LM / LP        list your personal mail\r
+LB [cat]       list bulletins, optionally filtered by category (e.g. LB WX)\r
+LT             list NTS/radiogram traffic\r
+LH             list held messages\r
+LK             list killed messages\r
+LF             list forwarded messages\r
+LY             list read (Y) messages\r
+LW             list worldwide (WW) bulletins\r
+LN             list messages new since your last login\r
+LR [n]         list last n messages in reverse order\r
+LS <text>      search messages by subject, To:, or From:\r
+LD <date>      list messages since date (MMDD, YYMMDD, or YYYYMMDD)\r
+L> n           list starting from message # n\r
 \r
 Columns: # Type Status Size To From Date Subject\r
 Type:   P=Personal  B=Bulletin  T=NTS\r
@@ -81,22 +112,33 @@ R = """\r
 R n [n ...]  read message(s) by number\r
              Personal mail: you must be the sender or recipient.\r
              Example:  R 12   or   R 12 13 15\r
+RA           read all new personal mail addressed to you, sequentially\r
+RP n         reply to message n (pre-fills To: and Re: subject)\r
 """
 
 S = """\r
 S  / SP <call>             send personal mail to <call>\r
 SB <cat>                   send bulletin  (e.g. SB WX  or  SB ALL)\r
-ST <call>                  send NTS radiogram\r
+ST / SN <call>             send NTS radiogram\r
 SC <msg#> <call[@bbs]>     copy message to another recipient\r
+RP <msg#>                  reply to a message (To: and Re: pre-filled)\r
 \r
 You will be prompted for To, At BBS, Subject, then body text.\r
 End the body with /EX or Ctrl-Z (^Z) on a line by itself.\r
+Abort with /AB.\r
 """
 
 K = """\r
-K n [n ...]  kill (delete) message(s) by number\r
-             You may only kill messages you sent or received.\r
-KM           kill all of your personal mail\r
+K n [n ...]          kill (delete) message(s) by number\r
+D / KILL / RM n ...  aliases for K\r
+                     You may only kill messages you sent or received.\r
+KM                   kill all of your personal mail\r
+\r
+System Operator (SYSOP):\r
+SH n [n ...]   hold message(s) — prevents forwarding\r
+SR n [n ...]   release held message(s) back to normal\r
+ED n           interactively edit subject and body of message n\r
+MOVE n <call[@bbs]>  reassign message n to a different recipient\r
 """
 
 N = """\r
@@ -105,21 +147,30 @@ NH [name]    set your display name  (no arg = show current)\r
 NL [locator] set your Maidenhead locator, e.g. FN20  (no arg = show current)\r
 NQ [city]    set your city / QTH description  (no arg = show current)\r
 NZ [zip]     set your ZIP / postal code  (no arg = show current)\r
+NB [call]    set your home BBS callsign  (no arg = show current)\r
 """
 
 O = """\r
 O                   show current options\r
 O PAGER <n>         set page length (lines per screen); 0 = paging off\r
+O LINES <n>         same as O PAGER\r
+O COLS <n>          set terminal column width\r
 O EXPERT on|off     toggle expert mode (suppresses extra prompts)\r
 O LANG <code>       set language preference (e.g. en)\r
 O BASE <n>          set your message base pointer to message # n\r
 O PW                change your login password\r
+X                   toggle expert mode on/off (shorthand)\r
 """
 
 I = """\r
 I           show node information (callsign, QTH, version)\r
 I <call>    look up <call> in the White Pages directory\r
 P <call>    alias for I <call>\r
+WPS <name>  search White Pages by name or partial callsign\r
+WHOAMI      show your callsign, privilege level, home BBS, and message base\r
+STATS       show node statistics (message counts, users, neighbors)\r
+DATE/TIME   show current UTC date and time\r
+BBS         list configured neighbor nodes and forwarding status\r
 """
 
 W = """\r
@@ -150,12 +201,17 @@ YAPP is supported by most packet terminal programs (TelePac, KAM, etc.).\r
 """
 
 SH = """\r
-SH n [n ...]   hold message(s) — prevents forwarding  [sysop]\r
-SR n [n ...]   release held message(s) back to normal  [sysop]\r
+SH n [n ...]   hold message(s) — prevents forwarding  [SYSOP]\r
+SR n [n ...]   release held message(s) back to normal  [SYSOP]\r
 """
 
 U = """\r
-U [search]  list registered users; optionally filter by partial callsign  [sysop]\r
+U [search]  list registered users; optionally filter by partial callsign  [SYSOP]\r
+"""
+
+F = """\r
+F              trigger outbound forwarding to all enabled neighbor nodes  [SYSOP]\r
+F <call>       trigger outbound forwarding to a specific neighbor\r
 """
 
 # ---------------------------------------------------------------------------
@@ -209,7 +265,7 @@ queued_forward = "\r\nMessage {id} queued for forwarding to {bbs}.\r\n"
 ok         = "\r\nMessage {id} killed.\r\n"
 not_found  = "\r\n? Message {id} not found.\r\n"
 not_yours  = "\r\n? You may only kill your own messages.\r\n"
-held       = "\r\n? Message {id} is held — ask the sysop to kill it.\r\n"
+held       = "\r\n? Message {id} is held — ask the System Operator (SYSOP) to kill it.\r\n"
 
 # ---------------------------------------------------------------------------
 # N — user profile
@@ -245,7 +301,7 @@ invalid        = "\r\n? Invalid option or value.\r\n"
 # ---------------------------------------------------------------------------
 
 [info]
-bbs_info       = "\r\n{branding} running on {node_call} at {qth}\r\nSysop: {owner}\r\n"
+bbs_info       = "\r\n{branding} running on {node_call} at {qth}\r\nSystem Operator (SYSOP): {owner}\r\n"
 wp_header      = "\r\nWhite Pages lookup:\r\n"
 wp_found       = "  {call:<10} Home: {home_bbs:<12} Name: {name}\r\n"
 wp_not_found   = "\r\n? No white pages entry for {call}.\r\n"
@@ -296,8 +352,8 @@ complete      = "\r\n[FWD] Forward complete.\r\n"
 # ---------------------------------------------------------------------------
 
 [sysop]
-paged     = "\r\nSysop has been paged.\r\n"
-not_avail = "\r\nSysop is not available.\r\n"
+paged     = "\r\nSystem Operator (SYSOP) has been paged.\r\n"
+not_avail = "\r\nSystem Operator (SYSOP) is not available.\r\n"
 
 # ---------------------------------------------------------------------------
 # Generic errors
