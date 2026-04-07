@@ -23,9 +23,7 @@ install_or_refresh_fail2ban
 install_or_refresh_logrotate
 enable_service
 restart_service_hard
-restart_web_service_hard
 enable_fail2ban_service
 apply_imported_fail2ban_badips
-wait_for_systemd_active "$PYBULLETIN_SERVICE_NAME"     45 || die "core service failed to restart"
-wait_for_systemd_active "$PYBULLETIN_WEB_SERVICE_NAME" 45 || die "web service failed to restart"
+wait_for_systemd_active "$PYBULLETIN_SERVICE_NAME" 45 || die "service failed to restart"
 log "upgrade complete"

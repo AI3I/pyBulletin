@@ -94,6 +94,9 @@ function connectWS() {
         if (document.getElementById("view-messages").classList.contains("active")) loadMessages();
         if (document.getElementById("view-dashboard").classList.contains("active")) loadDashboard();
       }
+      if (msg.type === "conference_update") {
+        if (document.getElementById("view-conference").classList.contains("active")) loadConference();
+      }
     } catch (_) {}
   };
 }

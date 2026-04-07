@@ -268,7 +268,6 @@ install_or_refresh_service() {
   root="$(repo_root)"
   for unit in \
     pybulletin.service \
-    pybulletin-web.service \
     pybulletin-forward.service \
     pybulletin-forward.timer \
     pybulletin-retention.service \
@@ -278,6 +277,8 @@ install_or_refresh_service() {
       "$root/deploy/systemd/$unit" \
       "$PYBULLETIN_SYSTEMD_DIR/$unit"
   done
+  # Disable legacy separate web service if present
+  systemctl disable --now pybulletin-web.service >/dev/null 2>&1 || true
   systemctl daemon-reload
 }
 
@@ -310,22 +311,19 @@ restart_web_service_hard() {
 }
 
 enable_service() {
-  systemctl enable "$PYBULLETIN_SERVICE_NAME"     >/dev/null
-  systemctl enable "$PYBULLETIN_WEB_SERVICE_NAME" >/dev/null
+  systemctl enable "$PYBULLETIN_SERVICE_NAME" >/dev/null
   systemctl enable --now "$PYBULLETIN_FORWARD_TIMER_NAME"   >/dev/null
   systemctl enable --now "$PYBULLETIN_RETENTION_TIMER_NAME" >/dev/null
 }
 
 disable_service() {
   systemctl disable "$PYBULLETIN_SERVICE_NAME"     >/dev/null 2>&1 || true
-  systemctl disable "$PYBULLETIN_WEB_SERVICE_NAME" >/dev/null 2>&1 || true
   systemctl disable --now "$PYBULLETIN_FORWARD_TIMER_NAME"   >/dev/null 2>&1 || true
   systemctl disable --now "$PYBULLETIN_RETENTION_TIMER_NAME" >/dev/null 2>&1 || true
 }
 
 stop_service() {
   systemctl stop "$PYBULLETIN_SERVICE_NAME"        >/dev/null 2>&1 || true
-  systemctl stop "$PYBULLETIN_WEB_SERVICE_NAME"    >/dev/null 2>&1 || true
   systemctl stop "$PYBULLETIN_FORWARD_TIMER_NAME"  >/dev/null 2>&1 || true
   systemctl stop "$PYBULLETIN_RETENTION_TIMER_NAME" >/dev/null 2>&1 || true
 }

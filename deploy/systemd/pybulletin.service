@@ -1,7 +1,8 @@
 [Unit]
-Description=pyBulletin core BBS service
+Description=pyBulletin BBS service (core + web)
 After=network-online.target
 Wants=network-online.target
+Conflicts=pybulletin-web.service
 
 [Service]
 Type=simple
@@ -9,7 +10,7 @@ User=pybulletin
 Group=pybulletin
 WorkingDirectory=/home/pybulletin/pyBulletin
 Environment=PYTHONPATH=src
-ExecStart=/usr/local/bin/pybulletin-python -m pybulletin.cli --config config/pybulletin.toml serve-core
+ExecStart=/usr/local/bin/pybulletin-python -m pybulletin.cli --config config/pybulletin.toml serve
 Restart=on-failure
 RestartSec=3
 KillSignal=SIGINT
