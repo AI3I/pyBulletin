@@ -340,6 +340,7 @@ class WebApp:
         return HTTPResponse.json({
             "ok":        True,
             "node":      cfg.node.node_call,
+            "motd":      cfg.node.motd,
             "version":   __version__,
             "uptime":    int(time.time()),
         })

@@ -30,7 +30,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     const h = await apiFetch("/api/health", {auth: false});
     document.getElementById("login-branding").textContent = h.node || "pyBulletin";
-    document.getElementById("login-node").textContent = h.node;
+    document.getElementById("login-node").textContent = h.motd || "Packet Radio BBS";
   } catch (_) {}
 });
 
