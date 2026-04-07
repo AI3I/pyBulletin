@@ -246,7 +246,14 @@ class WebApp:
                 elif t == "conference_message" and conf_room and conf_key and self._conf_hub:
                     text = str(data.get("text", "")).strip()
                     if text:
-                        await self._conf_hub.send_from_ws(conf_room, conf_key, text)
+                        async def _reply(s: str) -> None:
+                            for line in s.replace("\r", "").split("\n"):
+                                if line.strip():
+                                    await ws.send_json({"type": "conference_message", "text": line})
+                        switch = await self._conf_hub.handle_ws_input(conf_room, conf_key, text, _reply)
+                        if switch:
+                            await _leave_conf()
+                            await _join_conf(switch)
                 elif t == "conference_leave":
                     await _leave_conf()
                     await ws.send_json({"type": "conference_left"})

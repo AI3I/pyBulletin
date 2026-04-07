@@ -160,6 +160,31 @@ class ConferenceRoom:
             pass
         await self._broadcast(msg, exclude_key=session_key)
 
+    async def handle_ws_input(
+        self,
+        session_key: str,
+        text: str,
+        reply_cb: Callable,
+    ) -> str | None:
+        """Parse a web user's input. Returns new room name for /J, else None."""
+        upper = text.strip().upper()
+        if upper in _WHO_CMDS:
+            async with self._lock:
+                part = self._parts.get(session_key)
+            call = part.callsign if part else ""
+            await self._send_who(call, reply_cb)
+            return None
+        if upper in _LIST_CMDS:
+            await self._send_rooms(reply_cb)
+            return None
+        if upper.startswith("/J ") or upper.startswith("/JOIN "):
+            parts = text.strip().split(None, 1)
+            if len(parts) == 2 and parts[1].strip():
+                return parts[1].strip()
+            return None
+        await self.send_ws(session_key, text)
+        return None
+
     async def leave_ws(
         self,
         session_key: str,
@@ -323,6 +348,17 @@ class ConferenceHubManager:
             room = self._rooms.get(name)
         if room:
             await room.send_ws(session_key, text)
+
+    async def handle_ws_input(
+        self, room_name: str, session_key: str, text: str, reply_cb: Callable,
+    ) -> str | None:
+        """Parse web input. Returns new room name for /J switch, else None."""
+        name = _norm(room_name)
+        async with self._lock:
+            room = self._rooms.get(name)
+        if room:
+            return await room.handle_ws_input(session_key, text, reply_cb)
+        return None
 
     async def leave_room_ws(self, room_name: str, session_key: str) -> None:
         name = _norm(room_name)
