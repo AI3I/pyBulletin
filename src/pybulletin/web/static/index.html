@@ -40,13 +40,13 @@
       </div>
     </header>
     <div class="body">
-      <div class="form-grid one">
-        <div class="field">
+      <div class="form-row-inline">
+        <div class="form-row">
           <label for="login-call">Callsign</label>
           <input id="login-call" type="text" autocomplete="username"
                  style="text-transform:uppercase" onkeydown="if(event.key==='Enter')login()">
         </div>
-        <div class="field">
+        <div class="form-row">
           <label for="login-pass">Password</label>
           <input id="login-pass" type="password" autocomplete="current-password"
                  onkeydown="if(event.key==='Enter')login()">
@@ -56,6 +56,7 @@
         <button onclick="login()">Connect</button>
       </div>
       <div class="statusline error hidden" id="login-error"></div>
+      <p class="subtle" style="margin:.75rem 0 0;font-size:.8rem">You must have an account on this node to sign in. Contact the sysop if you need access.</p>
     </div>
   </section>
 </div>
