@@ -5,6 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/lib.sh"
 
 require_root
+# Pull latest code into the source repo before doing anything else,
+# so that lib.sh and all deploy scripts are up-to-date for this run.
+if git -C "$(repo_root)" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git -C "$(repo_root)" pull --ff-only --quiet || true
+fi
 ensure_base_packages
 ensure_supported_python
 log "upgrading pyBulletin in $PYBULLETIN_APP_DIR"
