@@ -1320,23 +1320,27 @@ class CommandEngine:
     # ------------------------------------------------------------------
 
     async def _cmd_page_sysop(self, args: str) -> None:
-        """T — send a page request to the sysop."""
+        """T — send a page request to all system operators."""
         user = self._user
-        LOG.info("session: %s paged sysop from %s", user.call, self._s.meta.peer)
-        # Best-effort: store a paged-notification message to SYSOP
+        LOG.info("session: %s paged sysops from %s", user.call, self._s.meta.peer)
+        # Send a private message to every sysop-privileged user
         try:
-            from ..store.models import Message, MSG_PRIVATE
-            note = Message(
-                msg_type=MSG_PRIVATE,
-                from_call=user.call,
-                to_call="SYSOP",
-                subject=f"PAGE from {user.call}",
-                body=f"{user.call} is requesting sysop assistance "
-                     f"(telnet from {self._s.meta.peer}).\r\n",
-            )
-            await self._store.insert_message(note)
+            sysops = await self._store.list_users(privilege=PRIV_SYSOP)
+            body = (f"{user.call} is requesting System Operator assistance "
+                    f"(connected from {self._s.meta.peer}).\r\n")
+            for sysop in sysops:
+                note = Message(
+                    msg_type=MSG_PRIVATE,
+                    from_call=user.call,
+                    to_call=sysop.call,
+                    subject=f"PAGE from {user.call}",
+                    body=body,
+                )
+                await self._store.insert_message(note)
+            if not sysops:
+                LOG.warning("session: T command — no sysop users found in store")
         except Exception:
-            pass
+            LOG.exception("session: T command failed to store page messages")
         await self._s.send(self._st.get("sysop.paged"))
 
     # ------------------------------------------------------------------
