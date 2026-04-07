@@ -759,7 +759,7 @@ class WebApp:
         })
 
     async def _conference_status(self, req: HTTPRequest, sess) -> HTTPResponse:
-        if sess is None or not sess.is_sysop:
+        if sess is None:
             return HTTPResponse.forbidden()
         if self._conf_hub is None:
             return HTTPResponse.json({"available": False, "rooms": {}})

@@ -134,7 +134,8 @@ function showView(name) {
   const nb = document.getElementById("nav-" + name);
   if (nb) nb.classList.add("active");
 
-  if (name === "profile" && SESSION) loadProfile();
+  if (name === "profile"   && SESSION) loadProfile();
+  if (name === "conference" && SESSION) loadConfRooms();
 }
 
 // ---------------------------------------------------------------------------
@@ -391,6 +392,21 @@ function toast(msg, type = "info") {
 // ---------------------------------------------------------------------------
 let _confRoom = null;
 
+async function loadConfRooms() {
+  const el = document.getElementById("conf-rooms-list");
+  if (!el || !SESSION) return;
+  const data = await apiFetch("/api/conference");
+  if (!data || !data.available) { el.innerHTML = ""; return; }
+  const rooms = Object.entries(data.rooms);
+  if (rooms.length === 0) { el.innerHTML = '<p class="subtle" style="margin:0">No active rooms.</p>'; return; }
+  let html = '<table class="data-table" style="margin-top:.25rem"><thead><tr><th>Room</th><th>Members</th></tr></thead><tbody>';
+  for (const [name, r] of rooms.sort()) {
+    html += `<tr><td><a href="#" onclick="event.preventDefault();document.getElementById('conf-room').value='${escHtml(name)}'">${escHtml(name)}</a></td><td>${r.members.map(escHtml).join(", ")}</td></tr>`;
+  }
+  html += "</tbody></table>";
+  el.innerHTML = html;
+}
+
 function confJoin() {
   if (!WS || WS.readyState !== WebSocket.OPEN) {
     toast("Not connected.", "error"); return;
@@ -430,6 +446,7 @@ function confOnJoined(room, welcome) {
   document.getElementById("conf-leave-btn").style.display = "";
   document.getElementById("conf-room-label").textContent  = `Room: ${room}`;
   document.getElementById("conf-chat-card").style.display = "flex";
+  document.getElementById("conf-rooms-list").style.display = "none";
   const log = document.getElementById("conf-log");
   log.textContent = "";
   confAppend(welcome);
@@ -442,6 +459,8 @@ function confOnLeft() {
   document.getElementById("conf-leave-btn").style.display = "none";
   document.getElementById("conf-room-label").textContent  = "";
   document.getElementById("conf-chat-card").style.display = "none";
+  document.getElementById("conf-rooms-list").style.display = "";
+  loadConfRooms();
 }
 
 function confAppend(text) {
