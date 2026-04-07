@@ -37,11 +37,11 @@ locked_out     = "\r\n? Access denied.\r\n"
 compact = """\r
 Commands (?<cmd>=detail  ??=full list):\r
  List: L  LL LM LB LN LR LW LS LD LH LF LK\r
- Msg : R  RA RP\r
+ Read: R  RA RP\r
  Send: S  SB ST SC\r
  Mgmt: K  KM N  NH NL NQ NZ NB O  X\r
  Info: I  P  WPS W  V  J  C  T  Y\r
- Bye : B\r
+ Exit: B\r
 """
 
 short = """\r
