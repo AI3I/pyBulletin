@@ -34,15 +34,7 @@ locked_out     = "\r\n? Access denied.\r\n"
 # ---------------------------------------------------------------------------
 
 [help]
-compact = """\r
-Commands (?<cmd>=detail  ??=full list):\r
- List: L  LL LM LB LN LR LW LS LD LH LF LK LT LY\r
- Read: R  RA RP\r
- Send: S  SB ST SC\r
- Mgmt: K  KM N  NH NL NQ NZ NB O  X\r
- Info: I  P  WS  W  V  J  ME NS DT BB\r
- Misc: C  T  Y\r
-"""
+compact = "\r\n[L]ist/[R]ead/[S]end/[K]ill/[N]ew/[I]nfo/[O]pts/[C]onf/[T]page  ??=full  ?X=detail\r\n"
 
 short = """\r
  Reading  L      List msgs from base          LL     List last N messages\r
