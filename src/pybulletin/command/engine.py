@@ -112,6 +112,7 @@ class CommandEngine:
             "LR": self._cmd_list_reverse,
             "LL": self._cmd_list_last,
             "LM": self._cmd_list_mine,
+            "LP": self._cmd_list_mine,
             "LB": self._cmd_list_bulletins,
             "LT": self._cmd_list_nts,
             "LH": self._cmd_list_held,
@@ -127,9 +128,12 @@ class CommandEngine:
             "S":  self._cmd_send_private,
             "SB": self._cmd_send_bulletin,
             "ST": self._cmd_send_nts,
+            "SN": self._cmd_send_nts,
             "SC": self._cmd_copy_message,
             # Kill
             "K":  self._cmd_kill,
+            "D":  self._cmd_kill,
+            "RM": self._cmd_kill,
             "KM": self._cmd_kill_mine,
             "KK": self._cmd_kill_bulk,
             # Options / profile
@@ -151,7 +155,9 @@ class CommandEngine:
             "ED": self._cmd_edit_terminal,
             "MV": self._cmd_move,
             "SH": self._cmd_sysop_hold,
+            "MH": self._cmd_sysop_hold,
             "SR": self._cmd_sysop_release,
+            "MR": self._cmd_sysop_release,
             # Status / info
             "DT": self._cmd_datetime,
             "NS": self._cmd_stats,
@@ -191,6 +197,11 @@ class CommandEngine:
         if verb.startswith("L>"):
             n_str = verb[2:] or args
             await self._cmd_list_from(n_str)
+            return
+
+        # Special: K> call  K< call  K@ bbs — bulk kill by from/to/bbs
+        if verb in ("K>", "K<", "K@"):
+            await self._cmd_kill_bulk(verb[1:] + " " + args)
             return
 
         # ?X  — detailed help for command X  (e.g. ?O, ?L, ?S)
