@@ -353,17 +353,32 @@ class CommandEngine:
 
     async def _wp_lookup(self, call: str) -> None:
         entry = await self._store.get_wp_entry(call)
-        if entry:
-            await self._s.send(self._st.get(
-                "info.wp_header"
-            ) + self._st.get(
-                "info.wp_found",
-                call=entry.call,
-                home_bbs=entry.home_bbs,
-                name=entry.name,
-            ))
-        else:
+        user  = await self._store.get_user(call)
+        if not entry and not user:
             await self._s.send(self._st.get("info.wp_not_found", call=call))
+            return
+
+        # Merge: local User record has richer profile data; WPEntry covers remotes
+        name     = (user and user.display_name) or (entry and entry.name) or ""
+        home_bbs = (user and user.home_bbs) or (entry and entry.home_bbs) or ""
+        locator  = (user and user.locator)  or ""
+        city     = (user and user.city)     or ""
+        zip_code = (user and user.zip_code) or ""
+        source   = (entry and entry.source_bbs) or self._cfg.node.node_call
+
+        lines = [f"\r\n  Callsign : {call}\r\n"]
+        if name:
+            lines.append(f"  Name     : {name}\r\n")
+        lines.append(f"  Home BBS : {home_bbs or '(not set)'}\r\n")
+        if locator:
+            lines.append(f"  Locator  : {locator}\r\n")
+        if city:
+            lines.append(f"  QTH      : {city}\r\n")
+        if zip_code:
+            lines.append(f"  ZIP      : {zip_code}\r\n")
+        if source and source != self._cfg.node.node_call:
+            lines.append(f"  Source   : {source}\r\n")
+        await self._s.send("".join(lines))
 
     async def _cmd_wp_search(self, args: str) -> None:
         """WPS name — search White Pages by name or partial callsign."""
@@ -1813,15 +1828,25 @@ class CommandEngine:
             await self._s.send("\r\n  Usage: IL <callsign>\r\n")
             return
         entry = await self._store.get_wp_entry(call)
-        if entry is None:
+        user  = await self._store.get_user(call)
+        if entry is None and user is None:
             await self._s.send(f"\r\n  No WP entry for {call}.\r\n")
             return
-        updated = entry.updated_at.strftime("%Y-%m-%d %H:%M UTC") if entry.updated_at else "?"
+        name     = (user and user.display_name) or (entry and entry.name) or "(not set)"
+        home_bbs = (user and user.home_bbs) or (entry and entry.home_bbs) or "(not set)"
+        locator  = (user and user.locator)  or "(not set)"
+        city     = (user and user.city)     or "(not set)"
+        zip_code = (user and user.zip_code) or "(not set)"
+        source   = (entry and entry.source_bbs) or self._cfg.node.node_call
+        updated  = entry.updated_at.strftime("%Y-%m-%d %H:%M UTC") if (entry and entry.updated_at) else "?"
         await self._s.send(
-            f"\r\n  Callsign  : {entry.call}\r\n"
-            f"  Name      : {entry.name or '(not set)'}\r\n"
-            f"  Home BBS  : {entry.home_bbs or '(not set)'}\r\n"
-            f"  Source BBS: {entry.source_bbs or '(not set)'}\r\n"
+            f"\r\n  Callsign  : {call}\r\n"
+            f"  Name      : {name}\r\n"
+            f"  Home BBS  : {home_bbs}\r\n"
+            f"  Locator   : {locator}\r\n"
+            f"  QTH       : {city}\r\n"
+            f"  ZIP       : {zip_code}\r\n"
+            f"  Source BBS: {source}\r\n"
             f"  Updated   : {updated}\r\n"
         )
 
