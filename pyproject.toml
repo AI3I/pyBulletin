@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "pybulletin"
 dynamic = ["version"]
 description = "Modern packet radio BBS with web UI, FBB-compatible forwarding, and AX.25/KISS/PACTOR transport"
+license = {text = "AGPL-3.0-or-later"}
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
