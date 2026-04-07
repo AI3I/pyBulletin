@@ -8,7 +8,7 @@
 # ---------------------------------------------------------------------------
 
 [connect]
-banner    = "\r\n{branding} [{node_call}] de {node_call} >\r\n"
+banner    = "\r\n{branding} [{node_call}] de {node_call}\r\n"
 motd      = "\r\n{motd}\r\n"
 login_tip = "\r\n{login_tip}\r\n"
 prompt        = "\r\n{node_call}{prompt_char}{suffix} "
