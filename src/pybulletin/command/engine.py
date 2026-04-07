@@ -98,110 +98,84 @@ class CommandEngine:
         # Command routing table: first token (upper) → handler method
         self._table: dict[str, any] = {
             # Core
-            "H":       self._cmd_help,
-            "HELP":    self._cmd_help,
-            "?":       self._cmd_help,
-            "V":       self._cmd_version,
-            "VERSION": self._cmd_version,
+            "H":  self._cmd_help,
+            "?":  self._cmd_help,
+            "V":  self._cmd_version,
             # Info / WP
-            "I":       self._cmd_info,
-            "INFO":    self._cmd_info,
-            "P":       self._cmd_wp,
-            "WP":      self._cmd_wp,
+            "I":  self._cmd_info,
+            "P":  self._cmd_wp,
             # Message browsing / reading
-            "N":       self._cmd_new,
-            "RA":      self._cmd_read_all,
-            "L":       self._cmd_list,
-            "LA":      self._cmd_list,              # FBB alias
-            "LN":      self._cmd_list_new_login,
-            "LR":      self._cmd_list_reverse,
-            "LL":      self._cmd_list_last,
-            "LM":      self._cmd_list_mine,
-            "LP":      self._cmd_list_mine,         # FBB alias
-            "LB":      self._cmd_list_bulletins,
-            "LT":      self._cmd_list_nts,
-            "LH":      self._cmd_list_held,
-            "LK":      self._cmd_list_killed,
-            "LF":      self._cmd_list_forwarded,
-            "LY":      self._cmd_list_read,
-            "LW":      self._cmd_list_ww,
-            "LS":      self._cmd_list_search,
-            "LD":      self._cmd_list_date,
-            "R":       self._cmd_read,
-            "RE":      self._cmd_read,
-            "RP":      self._cmd_reply,
+            "N":  self._cmd_new,
+            "RA": self._cmd_read_all,
+            "L":  self._cmd_list,
+            "LN": self._cmd_list_new_login,
+            "LR": self._cmd_list_reverse,
+            "LL": self._cmd_list_last,
+            "LM": self._cmd_list_mine,
+            "LB": self._cmd_list_bulletins,
+            "LT": self._cmd_list_nts,
+            "LH": self._cmd_list_held,
+            "LK": self._cmd_list_killed,
+            "LF": self._cmd_list_forwarded,
+            "LY": self._cmd_list_read,
+            "LW": self._cmd_list_ww,
+            "LS": self._cmd_list_search,
+            "LD": self._cmd_list_date,
+            "R":  self._cmd_read,
+            "RP": self._cmd_reply,
             # Message sending / copying
-            "S":       self._cmd_send_private,
-            "SP":      self._cmd_send_private,
-            "SB":      self._cmd_send_bulletin,
-            "ST":      self._cmd_send_nts,
-            "SN":      self._cmd_send_nts,           # FBB alias
-            "SC":      self._cmd_copy_message,
+            "S":  self._cmd_send_private,
+            "SB": self._cmd_send_bulletin,
+            "ST": self._cmd_send_nts,
+            "SC": self._cmd_copy_message,
             # Kill
-            "K":       self._cmd_kill,
-            "KM":      self._cmd_kill_mine,
-            "KK":      self._cmd_kill_bulk,          # bulk kill by type/criteria
-            "D":       self._cmd_kill,               # legacy alias
-            "KILL":    self._cmd_kill,               # long form
-            "RM":      self._cmd_kill,               # MSYS alias
+            "K":  self._cmd_kill,
+            "KM": self._cmd_kill_mine,
+            "KK": self._cmd_kill_bulk,
             # Options / profile
-            "O":       self._cmd_options,
-            "NH":      self._cmd_nh,
-            "NL":      self._cmd_nl,
-            "NQ":      self._cmd_nq,
-            "NZ":      self._cmd_nz,
-            "NB":      self._cmd_nb,
+            "O":  self._cmd_options,
+            "NH": self._cmd_nh,
+            "NL": self._cmd_nl,
+            "NQ": self._cmd_nq,
+            "NZ": self._cmd_nz,
+            "NB": self._cmd_nb,
             # Forwarding (sysop)
-            "F":       self._cmd_forward,
-            "FL":      self._cmd_forward_list,       # list forward queue
-            "FN":      self._cmd_forward_path,       # show BBSes for a message
-            "FD":      self._cmd_forward_drop,       # remove from forward queue
-            "FW":      self._cmd_forward_start,      # start forwarding session
-            "FS":      self._cmd_forward_stop,       # stop forwarding
+            "F":  self._cmd_forward,
+            "FL": self._cmd_forward_list,
+            "FN": self._cmd_forward_path,
+            "FD": self._cmd_forward_drop,
+            "FS": self._cmd_forward_stop,
             # Sysop message management
-            "$":       self._cmd_msg_status,         # show forwarding status
-            "EM":      self._cmd_edit_body,          # edit message body only
-            "ED":      self._cmd_edit_terminal,
-            "MV":      self._cmd_move,
-            "MOVE":    self._cmd_move,              # legacy alias
+            "$":  self._cmd_msg_status,
+            "EM": self._cmd_edit_body,
+            "ED": self._cmd_edit_terminal,
+            "MV": self._cmd_move,
+            "SH": self._cmd_sysop_hold,
+            "SR": self._cmd_sysop_release,
             # Status / info
-            "DATE":    self._cmd_datetime,
-            "TIME":    self._cmd_datetime,
-            "DT":      self._cmd_datetime,           # short alias
-            "STATS":   self._cmd_stats,
-            "NS":      self._cmd_stats,              # short alias
-            "WHOAMI":  self._cmd_whoami,
-            "ME":      self._cmd_whoami,             # short alias
-            "X":       self._cmd_expert_toggle,
-            "BBS":     self._cmd_bbs_list,
-            "BB":      self._cmd_bbs_list,           # short alias
-            "WHO":     self._cmd_who,                # long form alias
-            "W":       self._cmd_who,
-            "J":       self._cmd_heard,
-            # WP search
-            "WPS":     self._cmd_wp_search,
-            "WS":      self._cmd_wp_search,          # short alias
-            # Sysop
-            "SH":      self._cmd_sysop_hold,
-            "MH":      self._cmd_sysop_hold,     # FBB alias
-            "SR":      self._cmd_sysop_release,
-            "MR":      self._cmd_sysop_release,  # FBB alias
-            "U":       self._cmd_users,
-            "DU":      self._cmd_user_detail,    # display full user record
-            "DS":      self._cmd_sysop_list,     # list sysop users
-            "EU":      self._cmd_user_edit,      # edit user record inline
-            # White Pages sysop
-            "IL":      self._cmd_wp_detail,      # detailed WP record view
-            "IE":      self._cmd_wp_edit,        # edit WP record
+            "DT": self._cmd_datetime,
+            "NS": self._cmd_stats,
+            "ME": self._cmd_whoami,
+            "X":  self._cmd_expert_toggle,
+            "BB": self._cmd_bbs_list,
+            "W":  self._cmd_who,
+            "J":  self._cmd_heard,
+            "WS": self._cmd_wp_search,
+            # Sysop user/WP management
+            "U":  self._cmd_users,
+            "DU": self._cmd_user_detail,
+            "DS": self._cmd_sysop_list,
+            "EU": self._cmd_user_edit,
+            "IL": self._cmd_wp_detail,
+            "IE": self._cmd_wp_edit,
             # File transfer
-            "Y":       self._cmd_yapp_list,   # bare Y = list files
-            "YL":      self._cmd_yapp_list,
-            "YG":      self._cmd_yapp_get,
-            "YU":      self._cmd_yapp_upload,
-            # Conference
-            "C":       self._cmd_conference,
-            # Sysop page
-            "T":       self._cmd_page_sysop,
+            "Y":  self._cmd_yapp_list,
+            "YL": self._cmd_yapp_list,
+            "YG": self._cmd_yapp_get,
+            "YU": self._cmd_yapp_upload,
+            # Conference / page
+            "C":  self._cmd_conference,
+            "T":  self._cmd_page_sysop,
         }
 
     async def dispatch(self, line: str) -> None:
@@ -260,26 +234,22 @@ class CommandEngine:
 
     # Aliases → canonical command name for help lookup
     _HELP_ALIASES: dict[str, str] = {
-        "SP": "S", "RE": "R", "RP": "R", "WP": "I", "INFO": "I",
-        "HELP": "H", "VERSION": "V",
-        "LL": "L", "LM": "L", "LP": "L", "LB": "L", "LT": "L",
+        "RP": "R", "RA": "R",
+        "LL": "L", "LM": "L", "LB": "L", "LT": "L",
         "LH": "L", "LK": "L", "LF": "L", "LY": "L",
-        "LA": "L", "LW": "L", "LS": "L", "LD": "L", "LN": "L", "LR": "L",
-        "SC": "S", "SN": "S",
-        "KM": "K", "D": "K", "KILL": "K", "RM": "K", "KK": "K",
-        "MH": "SH", "MR": "SR",
-        "EM": "SH", "ED": "SH", "MV": "SH", "MOVE": "SH", "$": "SH",
+        "LW": "L", "LS": "L", "LD": "L", "LN": "L", "LR": "L",
+        "SC": "S",
+        "KM": "K", "KK": "K",
+        "EM": "SH", "ED": "SH", "MV": "SH", "$": "SH",
         "YG": "Y", "YU": "Y", "YL": "Y",
         "NH": "N", "NL": "N", "NQ": "N", "NZ": "N", "NB": "N",
-        "RA": "R",
-        "P": "I", "WPS": "I", "WS": "I", "BBS": "I", "BB": "I",
+        "P": "I", "WS": "I", "BB": "I",
         "IL": "IL", "IE": "IL",
-        "WHO": "W", "WHOAMI": "W", "ME": "W",
-        "DATE": "V", "TIME": "V", "DT": "V",
-        "STATS": "V", "NS": "V",
+        "ME": "W",
+        "DT": "V", "NS": "V",
         "X": "O",
         "DU": "U", "DS": "U", "EU": "U",
-        "FL": "F", "FN": "F", "FD": "F", "FW": "F", "FS": "F",
+        "FL": "F", "FN": "F", "FD": "F", "FS": "F",
     }
 
     async def _cmd_help(self, args: str) -> None:

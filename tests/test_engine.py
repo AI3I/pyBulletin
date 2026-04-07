@@ -98,12 +98,7 @@ async def test_version_command(fake_session):
 # ---------------------------------------------------------------------------
 
 async def test_date_command(fake_session):
-    out = await _dispatch(fake_session, "DATE")
-    assert "UTC" in out
-
-
-async def test_time_alias(fake_session):
-    out = await _dispatch(fake_session, "TIME")
+    out = await _dispatch(fake_session, "DT")
     assert "UTC" in out
 
 
@@ -112,17 +107,17 @@ async def test_time_alias(fake_session):
 # ---------------------------------------------------------------------------
 
 async def test_whoami_shows_callsign(fake_session):
-    out = await _dispatch(fake_session, "WHOAMI")
+    out = await _dispatch(fake_session, "ME")
     assert "W1TEST" in out
 
 
 async def test_whoami_shows_privilege(fake_session):
-    out = await _dispatch(fake_session, "WHOAMI")
+    out = await _dispatch(fake_session, "ME")
     assert "user" in out.lower() or "privilege" in out.lower()
 
 
 async def test_whoami_sysop(sysop_session):
-    out = await _dispatch(sysop_session, "WHOAMI")
+    out = await _dispatch(sysop_session, "ME")
     assert "AI3I" in out
 
 
@@ -132,16 +127,16 @@ async def test_whoami_sysop(sysop_session):
 
 async def test_stats_command(fake_session, store):
     await store.insert_message(_msg())
-    out = await _dispatch(fake_session, "STATS")
+    out = await _dispatch(fake_session, "NS")
     assert "Messages" in out or "messages" in out.lower()
 
 
 # ---------------------------------------------------------------------------
-# BBS
+# BB — neighbor nodes
 # ---------------------------------------------------------------------------
 
 async def test_bbs_no_neighbors(fake_session):
-    out = await _dispatch(fake_session, "BBS")
+    out = await _dispatch(fake_session, "BB")
     assert "No neighbor" in out or "neighbor" in out.lower()
 
 
@@ -185,11 +180,11 @@ async def test_kill_message(fake_session, store):
     assert msg.status == STATUS_KILLED
 
 
-async def test_kill_aliases(fake_session, store):
+async def test_kill_second_message(fake_session, store):
     msg_id1 = await store.insert_message(_msg(to="W1TEST"))
     msg_id2 = await store.insert_message(_msg(to="W1TEST"))
-    await _dispatch(fake_session, f"D {msg_id1}")
-    await _dispatch(fake_session, f"KILL {msg_id2}")
+    await _dispatch(fake_session, f"K {msg_id1}")
+    await _dispatch(fake_session, f"K {msg_id2}")
     assert (await store.get_message(msg_id1)).status == STATUS_KILLED
     assert (await store.get_message(msg_id2)).status == STATUS_KILLED
 
@@ -452,19 +447,19 @@ async def test_nh_updates_wp(fake_session, store):
 # ---------------------------------------------------------------------------
 
 async def test_wps_no_args_shows_usage(fake_session):
-    out = await _dispatch(fake_session, "WPS")
+    out = await _dispatch(fake_session, "WS")
     assert "Usage" in out or "usage" in out.lower()
 
 
 async def test_wps_finds_by_call(fake_session, store):
     from pybulletin.store.models import WPEntry
     await store.upsert_wp_entry(WPEntry(call="W1FIND", name="Alice"))
-    out = await _dispatch(fake_session, "WPS W1FIND")
+    out = await _dispatch(fake_session, "WS W1FIND")
     assert "W1FIND" in out
 
 
 async def test_wps_no_results(fake_session):
-    out = await _dispatch(fake_session, "WPS ZZZNOBODY")
+    out = await _dispatch(fake_session, "WS ZZZNOBODY")
     assert "No" in out or len(out) > 0
 
 
@@ -474,26 +469,26 @@ async def test_wps_no_results(fake_session):
 
 async def test_move_requires_sysop(fake_session, store):
     msg_id = await store.insert_message(_msg(to="W1TEST"))
-    await _dispatch(fake_session, f"MOVE {msg_id} K9NEW")
+    await _dispatch(fake_session, f"MV {msg_id} K9NEW")
     msg = await store.get_message(msg_id)
     assert msg.to_call == "W1TEST"  # unchanged
 
 
 async def test_move_message(sysop_session, store):
     msg_id = await store.insert_message(_msg(to="W1TEST"))
-    await _dispatch(sysop_session, f"MOVE {msg_id} K9NEW")
+    await _dispatch(sysop_session, f"MV {msg_id} K9NEW")
     msg = await store.get_message(msg_id)
     assert msg.to_call == "K9NEW"
 
 
 async def test_move_no_args_shows_usage(sysop_session):
-    out = await _dispatch(sysop_session, "MOVE")
+    out = await _dispatch(sysop_session, "MV")
     assert "Usage" in out or "usage" in out.lower()
 
 
 async def test_move_with_at_bbs(sysop_session, store):
     msg_id = await store.insert_message(_msg(to="W1TEST"))
-    await _dispatch(sysop_session, f"MOVE {msg_id} K9NEW@W3BBS")
+    await _dispatch(sysop_session, f"MV {msg_id} K9NEW@W3BBS")
     msg = await store.get_message(msg_id)
     assert msg.to_call == "K9NEW"
     assert msg.at_bbs == "W3BBS"
