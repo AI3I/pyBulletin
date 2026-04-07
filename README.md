@@ -118,7 +118,7 @@ enabled      = true
 listen_port  = 6301
 
 [[forward.neighbor]]
-call       = "W1BBS-1"
+call       = "AI3I-1"
 address    = "w1bbs.example.net:6301"
 protocol   = "b2"
 schedule   = "0 */4 * * *"   # UTC cron — every 4 hours
