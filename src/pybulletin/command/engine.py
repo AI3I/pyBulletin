@@ -174,6 +174,7 @@ class CommandEngine:
             "MR":      self._cmd_sysop_release,  # FBB alias
             "U":       self._cmd_users,
             # File transfer
+            "Y":       self._cmd_yapp_list,   # bare Y = list files
             "YL":      self._cmd_yapp_list,
             "YG":      self._cmd_yapp_get,
             "YU":      self._cmd_yapp_upload,

@@ -36,41 +36,41 @@ locked_out     = "\r\n? Access denied.\r\n"
 [help]
 short = """\r
  Reading\r
-  L   List messages          LL  List last n msgs\r
-  LM  List my mail           LB  List bulletins\r
-  LN  New since login        LR  List reverse\r
-  LW  List WW bulletins      LS  Search messages\r
-  LD  List since date        LK  List killed\r
-  LH  List held              LF  List forwarded\r
-  R   Read message(s)        RA  Read all new mail\r
-  N   New msg summary\r
+  L      List messages         LL     List last n msgs\r
+  LM     List my mail          LB     List bulletins\r
+  LN     New since login       LR     List reverse\r
+  LW     List WW bulletins     LS     Search messages\r
+  LD     List since date       LK     List killed\r
+  LH     List held             LF     List forwarded\r
+  R      Read message(s)       RA     Read all new mail\r
+  N      New msg summary\r
 \r
  Sending\r
-  S   Send personal mail     SB  Send bulletin\r
-  ST  Send NTS traffic       SC  Copy message\r
-  RP  Reply to message\r
+  S      Send personal mail    SB     Send bulletin\r
+  ST     Send NTS traffic      SC     Copy message\r
+  RP     Reply to message\r
 \r
  Manage\r
-  K   Kill message(s)        KM  Kill all my mail\r
-  NB  Set home BBS           NH  Set display name\r
-  NL  Set locator            NQ  Set QTH / city\r
-  NZ  Set ZIP code           O   Options\r
-  X   Toggle expert mode\r
+  K      Kill message(s)       KM     Kill all my mail\r
+  NB     Set home BBS          NH     Set display name\r
+  NL     Set locator           NQ     Set QTH / city\r
+  NZ     Set ZIP code          O      Options\r
+  X      Toggle expert mode\r
 \r
  Info\r
-  I   Node info / WP lookup  P   WP lookup (alias)\r
-  WPS Search white pages     W   Who is connected\r
-  WHOAMI  Show my profile    DATE  Current UTC time\r
-  STATS   Node statistics    BBS   Neighbor nodes\r
-  V   Version                J   Heard stations\r
+  I      Node info / WP lookup P      WP lookup (alias)\r
+  WPS    Search white pages    W      Who is connected\r
+  WHOAMI Show my profile       DATE   Current UTC time\r
+  STATS  Node statistics       BBS    Neighbor nodes\r
+  V      Version               J      Heard stations\r
 \r
  Other\r
-  C   Conference chat        T   Page the System Operator (SYSOP)\r
-  Y   YAPP file transfer     B   Bye (disconnect)\r
-  H / ?   Help\r
+  C      Conference chat       T      Page SYSOP\r
+  Y      YAPP file transfer    B      Bye (disconnect)\r
+  H / ?  Help\r
 \r
-System Operator (SYSOP): SH SR ED MOVE F U\r
-Type ?<command> for detailed help, e.g. ?L or ?S\r
+SYSOP: SH SR ED MOVE F U\r
+Type ?<cmd> for details  e.g. ?L  ?S  ?K\r
 """
 
 banner = "\r\npyBulletin — {branding} [{node_call}] — {version}\r\n"
