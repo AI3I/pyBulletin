@@ -398,7 +398,7 @@ async function loadConfRooms() {
   const data = await apiFetch("/api/conference");
   if (!data || !data.available) { el.innerHTML = ""; return; }
   const rooms = Object.entries(data.rooms);
-  if (rooms.length === 0) { el.innerHTML = '<p class="subtle" style="margin:0">No active rooms.</p>'; return; }
+  if (rooms.length === 0) { el.innerHTML = '<p class="subtle" style="margin:0">There are no active rooms.</p>'; return; }
   let html = '<table class="data-table" style="margin-top:.25rem"><thead><tr><th>Room</th><th>Members</th></tr></thead><tbody>';
   for (const [name, r] of rooms.sort()) {
     html += `<tr><td><a href="#" onclick="event.preventDefault();document.getElementById('conf-room').value='${escHtml(name)}'">${escHtml(name)}</a></td><td>${r.members.map(escHtml).join(", ")}</td></tr>`;
