@@ -45,33 +45,34 @@ Commands (?<cmd>=detail  ??=full list):\r
 """
 
 short = """\r
-  L      List msgs from base           LL     List last N messages\r
-  LM     Personal mail                 LB     Bulletins [category]\r
-  LN     New since login               LR     List reversed\r
-  LW     Worldwide bulletins           LS     Search msgs\r
-  LD     Since date (MMDD)             LH     Held messages\r
-  LK     Killed messages               LF     Forwarded messages\r
-  R      Read message(s)               RA     Read all new mail\r
-  RP     Reply to message              N      New msg count/advance\r
-  S/SP   Send personal mail            SB     Send bulletin [cat]\r
-  ST/SN  Send NTS radiogram            SC     Copy message\r
-  K      Kill message(s)               KM     Kill all my mail\r
-  NH     Set display name              NL     Set locator (e.g. FN20)\r
-  NQ     Set QTH/city                  NZ     Set ZIP code\r
-  NB     Set home BBS                  O      Options (pager/pw/etc)\r
-  X      Toggle expert mode            I/P    Node info / WP lookup\r
-  WS/WPS Search white pages            W      Who is connected\r
-  V      Software version              J      Heard stations (RF)\r
-  BB/BBS Neighbor nodes                DT     Current UTC time\r
-  NS     Node statistics               ME     My profile (WHOAMI)\r
-  C      Conference chat               T      Page system operator\r
-  Y/YL   YAPP file list                B      Bye/disconnect\r
-  SH/SR  Hold/release msg   [sysop]    ED/EM  Edit message   [sysop]\r
-  MOVE   Reassign recipient [sysop]    $      Msg status     [sysop]\r
-  KK     Bulk kill by type  [sysop]    K>/K<  Kill by from/to[sysop]\r
-  K@     Kill msgs at BBS   [sysop]    U/DU   List/view user [sysop]\r
-  DS/EU  Sysop list/edit    [sysop]    IL/IE  WP view/edit   [sysop]\r
-  F/FL   Forward/fwd queue  [sysop]    FN/FD  Path/drop fwd  [sysop]\r
+ Reading  L      List msgs from base          LL     List last N messages\r
+          LM     Personal mail                LB     Bulletins [category]\r
+          LN     New since login              LR     List reversed\r
+          LW     Worldwide bulletins          LS     Search msgs\r
+          LD     Since date (MMDD)            LH     Held messages\r
+          LK     Killed messages              LF     Forwarded messages\r
+          R      Read message(s)              RA     Read all new mail\r
+          RP     Reply to message             N      New msg count/advance\r
+ Sending  S/SP   Send personal mail           SB     Send bulletin [cat]\r
+          ST/SN  Send NTS radiogram           SC     Copy message\r
+ Manage   K      Kill message(s)              KM     Kill all my mail\r
+          NH     Set display name             NL     Set locator (e.g. FN20)\r
+          NQ     Set QTH/city                 NZ     Set ZIP code\r
+          NB     Set home BBS                 O      Options (pager/pw/etc)\r
+          X      Toggle expert mode\r
+ Info     I/P    Node info / WP lookup        WS     Search white pages\r
+          W      Who is connected             V      Software version\r
+          J      Heard stations (RF)          BB     Neighbor nodes\r
+          DT     Current UTC time             NS     Node statistics\r
+          ME     My profile (WHOAMI)\r
+ Other    C      Conference chat              T      Page system operator\r
+          Y/YL   YAPP file list               B      Bye/disconnect\r
+ SYSOP    SH/SR  Hold/release msg [sysop]     ED/EM  Edit message   [sysop]\r
+          MOVE   Reassign recip  [sysop]      $      Msg status     [sysop]\r
+          KK     Bulk kill type  [sysop]      K>/K<  Kill by from/to[sysop]\r
+          K@     Kill msgs@BBS   [sysop]      U/DU   List/view user [sysop]\r
+          DS/EU  Sysop list/edit [sysop]      IL/IE  WP view/edit   [sysop]\r
+          F/FL   Forward/queue   [sysop]      FN/FD  Path/drop fwd  [sysop]\r
 ?<cmd> detail  e.g. ?L ?S ?K ?F ?U ?IL\r
 """
 
