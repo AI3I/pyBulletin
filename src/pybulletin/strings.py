@@ -42,7 +42,7 @@ class StringCatalog:
     Strings are stored in a TOML file and accessed by dotted key::
 
         catalog.get("error.unknown_cmd")
-        catalog.get("prompt.connected", node="N0BBS-1", call="W1AW")
+        catalog.get("prompt.connected", node="NOCALL", call="NOCALL")
 
     The file is polled every :data:`_POLL_INTERVAL` seconds and reloaded
     transparently — no service restart needed for string changes.

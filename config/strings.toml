@@ -68,7 +68,7 @@ short = """\r
  Other    C      Conference chat              T      Page system operator\r
           Y/YL   YAPP file list               B      Bye/disconnect\r
  SYSOP    SH/SR  Hold / release message       ED/EM  Edit subject / body\r
-          MV/MOVE Reassign recipient          $      Message status / path\r
+          MV     Reassign recipient            $      Message status / path\r
           KK     Bulk kill by type            K>/K<  Kill by from / to call\r
           K@     Kill messages at BBS         U/DU   List / view user\r
           DS/EU  Sysop users / edit user      IL/IE  WP record view / edit\r
@@ -196,7 +196,7 @@ SH n [n ...]   hold message(s) — prevents forwarding  [SYSOP]\r
 SR n [n ...]   release held message(s) back to normal  [SYSOP]\r
 ED n           interactively edit subject and body of message n  [SYSOP]\r
 EM n           edit message body only  [SYSOP]\r
-MOVE n call[@bbs]  reassign message to a different recipient  [SYSOP]\r
+MV n call[@bbs]    reassign message to a different recipient  [SYSOP]\r
 $ n            show forwarding path and status for message n  [SYSOP]\r
 """
 

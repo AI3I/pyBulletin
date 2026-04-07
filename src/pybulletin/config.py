@@ -16,8 +16,8 @@ else:
 
 @dataclass(slots=True)
 class NodeConfig:
-    node_call: str = "N0BBS-1"
-    node_alias: str = "N0BBS"
+    node_call: str = "NOCALL"
+    node_alias: str = "NOCALL"
     owner_name: str = "BBS Sysop"
     qth: str = "Unknown"
     node_locator: str = ""

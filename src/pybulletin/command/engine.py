@@ -162,8 +162,8 @@ class CommandEngine:
             "$":       self._cmd_msg_status,         # show forwarding status
             "EM":      self._cmd_edit_body,          # edit message body only
             "ED":      self._cmd_edit_terminal,
-            "MOVE":    self._cmd_move,
-            "MV":      self._cmd_move,              # short alias
+            "MV":      self._cmd_move,
+            "MOVE":    self._cmd_move,              # legacy alias
             # Status / info
             "DATE":    self._cmd_datetime,
             "TIME":    self._cmd_datetime,
@@ -268,7 +268,7 @@ class CommandEngine:
         "SC": "S", "SN": "S",
         "KM": "K", "D": "K", "KILL": "K", "RM": "K", "KK": "K",
         "MH": "SH", "MR": "SR",
-        "EM": "SH", "ED": "SH", "MOVE": "SH", "MV": "SH", "$": "SH",
+        "EM": "SH", "ED": "SH", "MV": "SH", "MOVE": "SH", "$": "SH",
         "YG": "Y", "YU": "Y", "YL": "Y",
         "NH": "N", "NL": "N", "NQ": "N", "NZ": "N", "NB": "N",
         "RA": "R",
