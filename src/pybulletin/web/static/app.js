@@ -26,12 +26,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       localStorage.removeItem("pb_session");
     }
   }
-  // Load health to get node name for login page
-  try {
-    const h = await apiFetch("/api/health", {auth: false});
-    document.getElementById("login-branding").textContent = h.node || "pyBulletin";
-    document.getElementById("login-node").textContent = h.motd || "Packet Radio BBS";
-  } catch (_) {}
 });
 
 // ---------------------------------------------------------------------------
