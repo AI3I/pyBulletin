@@ -74,10 +74,10 @@ The BBS listens on:
 
 ```toml
 [node]
-node_call    = "W3BBS-1"
+node_call    = "AI3I-1"
 owner_name   = "Your Name"
 qth          = "FN20"
-motd         = "Welcome to W3BBS"
+motd         = "Welcome to AI3I"
 hierarchy    = ["WW", "NA", "US", "US-PA"]   # bulletin routing hierarchy
 ```
 
