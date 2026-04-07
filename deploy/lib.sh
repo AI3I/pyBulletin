@@ -99,9 +99,15 @@ install_packages() {
   mgr="$(pkg_manager)" || die "no supported package manager found"
   case "$mgr" in
     apt)
+      # Skip apt-get entirely if every requested package is already installed.
+      local missing=()
+      for pkg in "$@"; do
+        dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed" || missing+=("$pkg")
+      done
+      [ "${#missing[@]}" -eq 0 ] && return 0
       export DEBIAN_FRONTEND=noninteractive
       apt-get update
-      apt-get install -y "$@"
+      apt-get install -y "${missing[@]}"
       ;;
     dnf)
       maybe_enable_temp_swap
