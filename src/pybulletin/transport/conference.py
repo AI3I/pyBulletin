@@ -139,7 +139,7 @@ class ConferenceRoom:
         members_str = ", ".join(self.members) or "you"
         welcome = (
             f"*** Entering room {self.name}.  Members: {members_str}\n"
-            f"*** Type /WHO to list participants, /L for rooms, /X or Leave to exit."
+            f"*** /W=who  /L=rooms  /J room=switch  /X=exit"
         )
         await self._broadcast(f"*** {call} has joined {self.name}\r\n", exclude_key=key)
         LOG.info("conference[%s]: %s joined via web (%d total)", self.name, call, len(self._parts))
