@@ -297,16 +297,13 @@ held       = "\r\n? Message {id} is held — ask the System Operator (SYSOP) to 
 # ---------------------------------------------------------------------------
 
 [profile]
-enter_name    = "\r\nYour name (max 12 chars): "
-enter_home    = "Home BBS callsign       : "
-enter_locator = "QRA locator (e.g. FN20) : "
-enter_city    = "City / QTH              : "
-enter_zip     = "ZIP / postal code       : "
-enter_pw_new  = "New password            : "
-enter_pw_conf = "Confirm password        : "
+prompt        = "\r\n{field} [{current}]: "
+set           = "\r\n{field}: {value}\r\n"
+enter_pw_new  = "New password: "
+enter_pw_conf = "Confirm    : "
 pw_mismatch   = "\r\n? Passwords do not match.\r\n"
-pw_too_short  = "\r\n? Password must be at least 6 characters.\r\n"
-saved         = "\r\nProfile updated.\r\n"
+pw_too_short  = "\r\n? Password must be at least 6 chars.\r\n"
+saved         = "\r\nOK\r\n"
 
 # ---------------------------------------------------------------------------
 # O — options
@@ -326,12 +323,14 @@ invalid        = "\r\n? Invalid option or value.\r\n"
 # ---------------------------------------------------------------------------
 
 [info]
-bbs_info       = "\r\n{branding} running on {node_call} at {qth}\r\nSystem Operator (SYSOP): {owner}\r\n"
-wp_header      = "\r\nWhite Pages lookup:\r\n"
-wp_found       = "  {call:<10} Home: {home_bbs:<12} Name: {name}\r\n"
-wp_not_found   = "\r\n? No white pages entry for {call}.\r\n"
-wp_count       = "\r\nWhite Pages: {count} records.\r\n"
-version        = "\r\n{branding} {version} — {node_call} — {qth}\r\n"
+bbs_info        = "\r\n{branding} running on {node_call} at {qth}\r\nSystem Operator (SYSOP): {owner}\r\n"
+wp_card         = "\r\n{details}\r\n"
+wp_detail       = "\r\n{details}\r\nSrc:{source}  Upd:{updated}\r\n"
+wp_not_found    = "\r\n? No WP entry for {call}.\r\n"
+wp_count        = "\r\nWP: {count} records.\r\n"
+wp_search_none  = "\r\n? No WP entries matching '{term}'.\r\n"
+wp_search_row   = "{call:<10} {name:<20} {home_bbs}\r\n"
+version         = "\r\n{branding} {version} — {node_call} — {qth}\r\n"
 
 # ---------------------------------------------------------------------------
 # C — conference / chat
@@ -390,3 +389,4 @@ not_auth      = "\r\n? You must be logged in to use this command.\r\n"
 no_permission = "\r\n? You do not have permission for this command.\r\n"
 aborted       = "\r\nAborted.\r\n"
 internal      = "\r\n? Internal error. Please try again.\r\n"
+usage         = "\r\n? Usage: {cmd}\r\n"

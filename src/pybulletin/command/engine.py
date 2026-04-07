@@ -357,47 +357,36 @@ class CommandEngine:
         if not entry and not user:
             await self._s.send(self._st.get("info.wp_not_found", call=call))
             return
-
-        # Merge: local User record has richer profile data; WPEntry covers remotes
+        parts = [call]
         name     = (user and user.display_name) or (entry and entry.name) or ""
         home_bbs = (user and user.home_bbs) or (entry and entry.home_bbs) or ""
-        locator  = (user and user.locator)  or ""
-        city     = (user and user.city)     or ""
-        zip_code = (user and user.zip_code) or ""
-        source   = (entry and entry.source_bbs) or self._cfg.node.node_call
-
-        lines = [f"\r\n  Callsign : {call}\r\n"]
-        if name:
-            lines.append(f"  Name     : {name}\r\n")
-        lines.append(f"  Home BBS : {home_bbs or '(not set)'}\r\n")
-        if locator:
-            lines.append(f"  Locator  : {locator}\r\n")
-        if city:
-            lines.append(f"  QTH      : {city}\r\n")
-        if zip_code:
-            lines.append(f"  ZIP      : {zip_code}\r\n")
-        if source and source != self._cfg.node.node_call:
-            lines.append(f"  Source   : {source}\r\n")
-        await self._s.send("".join(lines))
+        locator  = (user and user.locator) or ""
+        city     = (user and user.city)    or ""
+        if name:     parts.append(name)
+        if home_bbs: parts.append(f"@{home_bbs}")
+        if locator:  parts.append(locator)
+        if city:     parts.append(city)
+        await self._s.send(self._st.get("info.wp_card", details="  ".join(parts)))
 
     async def _cmd_wp_search(self, args: str) -> None:
         """WPS name — search White Pages by name or partial callsign."""
         term = args.strip()
         if not term:
-            await self._s.send("\r\n  Usage: WPS <name or partial call>\r\n")
+            await self._s.send(self._st.get("error.usage", cmd="WS <name>"))
             return
         entries = await self._store.search_wp(term)
         if not entries:
-            await self._s.send(f"\r\n  No WP entries matching '{term}'.\r\n")
+            await self._s.send(self._st.get("info.wp_search_none", term=term))
             return
-        lines = [
-            "\r\n",
-            f"  {'Call':<12} {'Name':<20}  Home BBS\r\n",
-            "  " + "-" * 50 + "\r\n",
-        ]
+        lines = ["\r\n"]
         for e in entries:
-            lines.append(f"  {e.call:<12} {(e.name or '')[:20]:<20}  {e.home_bbs}\r\n")
-        lines.append(f"\r\n  {len(entries)} match(es).\r\n")
+            lines.append(self._st.get(
+                "info.wp_search_row",
+                call=e.call,
+                name=(e.name or "")[:20],
+                home_bbs=e.home_bbs,
+            ))
+        lines.append(self._st.get("list.end", count=len(entries)))
         await self._s.send_paged("".join(lines))
 
     # ------------------------------------------------------------------
@@ -647,10 +636,7 @@ class CommandEngine:
         if args.strip():
             name = args.strip()[:40]
         else:
-            await self._s.send(
-                f"\r\n  Current name : {user.display_name or '(not set)'}\r\n"
-                f"  Enter new name (blank to keep): "
-            )
+            await self._s.send(self._st.get("profile.prompt", field="Name", current=user.display_name or ""))
             name = (await self._s._readline()).strip()[:40]
             if not name:
                 return
@@ -666,7 +652,7 @@ class CommandEngine:
         wp.source_bbs = self._cfg.node.node_call
         await self._store.upsert_wp_entry(wp)
 
-        await self._s.send(f"\r\n  Name set to: {name}\r\n")
+        await self._s.send(self._st.get("profile.set", field="Name", value=name))
         LOG.info("session: %s set display_name=%r", user.call, name)
 
     # ------------------------------------------------------------------
@@ -680,17 +666,14 @@ class CommandEngine:
         if args.strip():
             locator = args.strip().upper()[:6]
         else:
-            await self._s.send(
-                f"\r\n  Current locator : {user.locator or '(not set)'}\r\n"
-                f"  Enter Maidenhead locator (e.g. FN20, blank to keep): "
-            )
+            await self._s.send(self._st.get("profile.prompt", field="Locator", current=user.locator or ""))
             locator = (await self._s._readline()).strip().upper()[:6]
             if not locator:
                 return
 
         user.locator = locator
         await self._store.upsert_user(user)
-        await self._s.send(f"\r\n  Locator set to: {locator}\r\n")
+        await self._s.send(self._st.get("profile.set", field="Locator", value=locator))
         LOG.info("session: %s set locator=%r", user.call, locator)
 
     # ------------------------------------------------------------------
@@ -703,16 +686,13 @@ class CommandEngine:
         if args.strip():
             city = args.strip()[:40]
         else:
-            await self._s.send(
-                f"\r\n  Current QTH : {user.city or '(not set)'}\r\n"
-                f"  Enter city/QTH (blank to keep): "
-            )
+            await self._s.send(self._st.get("profile.prompt", field="QTH", current=user.city or ""))
             city = (await self._s._readline()).strip()[:40]
             if not city:
                 return
         user.city = city
         await self._store.upsert_user(user)
-        await self._s.send(f"\r\n  QTH set to: {city}\r\n")
+        await self._s.send(self._st.get("profile.set", field="QTH", value=city))
         LOG.info("session: %s set city=%r", user.call, city)
 
     # ------------------------------------------------------------------
@@ -725,16 +705,13 @@ class CommandEngine:
         if args.strip():
             zip_code = args.strip()[:10]
         else:
-            await self._s.send(
-                f"\r\n  Current ZIP : {user.zip_code or '(not set)'}\r\n"
-                f"  Enter ZIP/postal code (blank to keep): "
-            )
+            await self._s.send(self._st.get("profile.prompt", field="ZIP", current=user.zip_code or ""))
             zip_code = (await self._s._readline()).strip()[:10]
             if not zip_code:
                 return
         user.zip_code = zip_code
         await self._store.upsert_user(user)
-        await self._s.send(f"\r\n  ZIP set to: {zip_code}\r\n")
+        await self._s.send(self._st.get("profile.set", field="ZIP", value=zip_code))
         LOG.info("session: %s set zip_code=%r", user.call, zip_code)
 
     # ------------------------------------------------------------------
@@ -747,10 +724,7 @@ class CommandEngine:
         if args.strip():
             home = args.strip().upper()[:12]
         else:
-            await self._s.send(
-                f"\r\n  Current home BBS : {user.home_bbs or '(not set)'}\r\n"
-                f"  Enter home BBS call (blank to keep): "
-            )
+            await self._s.send(self._st.get("profile.prompt", field="Home BBS", current=user.home_bbs or ""))
             home = (await self._s._readline()).strip().upper()[:12]
             if not home:
                 return
@@ -762,7 +736,7 @@ class CommandEngine:
         wp.home_bbs   = home
         wp.source_bbs = self._cfg.node.node_call
         await self._store.upsert_wp_entry(wp)
-        await self._s.send(f"\r\n  Home BBS set to: {home}\r\n")
+        await self._s.send(self._st.get("profile.set", field="Home BBS", value=home))
         LOG.info("session: %s set home_bbs=%r", user.call, home)
 
     # ------------------------------------------------------------------
@@ -1830,25 +1804,27 @@ class CommandEngine:
         entry = await self._store.get_wp_entry(call)
         user  = await self._store.get_user(call)
         if entry is None and user is None:
-            await self._s.send(f"\r\n  No WP entry for {call}.\r\n")
+            await self._s.send(self._st.get("info.wp_not_found", call=call))
             return
-        name     = (user and user.display_name) or (entry and entry.name) or "(not set)"
-        home_bbs = (user and user.home_bbs) or (entry and entry.home_bbs) or "(not set)"
-        locator  = (user and user.locator)  or "(not set)"
-        city     = (user and user.city)     or "(not set)"
-        zip_code = (user and user.zip_code) or "(not set)"
-        source   = (entry and entry.source_bbs) or self._cfg.node.node_call
-        updated  = entry.updated_at.strftime("%Y-%m-%d %H:%M UTC") if (entry and entry.updated_at) else "?"
-        await self._s.send(
-            f"\r\n  Callsign  : {call}\r\n"
-            f"  Name      : {name}\r\n"
-            f"  Home BBS  : {home_bbs}\r\n"
-            f"  Locator   : {locator}\r\n"
-            f"  QTH       : {city}\r\n"
-            f"  ZIP       : {zip_code}\r\n"
-            f"  Source BBS: {source}\r\n"
-            f"  Updated   : {updated}\r\n"
-        )
+        parts = [call]
+        name     = (user and user.display_name) or (entry and entry.name) or ""
+        home_bbs = (user and user.home_bbs) or (entry and entry.home_bbs) or ""
+        locator  = (user and user.locator)  or ""
+        city     = (user and user.city)     or ""
+        zip_code = (user and user.zip_code) or ""
+        if name:     parts.append(name)
+        if home_bbs: parts.append(f"@{home_bbs}")
+        if locator:  parts.append(locator)
+        if city:     parts.append(city)
+        if zip_code: parts.append(zip_code)
+        source  = (entry and entry.source_bbs) or self._cfg.node.node_call
+        updated = entry.updated_at.strftime("%Y-%m-%d %H:%M") if (entry and entry.updated_at) else "?"
+        await self._s.send(self._st.get(
+            "info.wp_detail",
+            details="  ".join(parts),
+            source=source,
+            updated=updated,
+        ))
 
     async def _cmd_wp_edit(self, args: str) -> None:
         """IE <callsign> — interactively edit a White Pages record."""
