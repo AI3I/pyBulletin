@@ -137,6 +137,7 @@ async function loadDashboard() {
     document.getElementById("s-new-t").textContent  = m.new_nts;
     document.getElementById("s-users").textContent  = s.users;
     document.getElementById("s-wp").textContent     = s.wp_entries;
+    document.getElementById("s-ver").textContent    = s.version;
     document.getElementById("dash-node-info").innerHTML = `
       <tr><th>Node</th><td class="mono">${escHtml(s.node)}</td></tr>
       <tr><th>QTH</th><td>${escHtml(s.qth)}</td></tr>
