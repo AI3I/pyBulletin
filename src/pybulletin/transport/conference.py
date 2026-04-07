@@ -101,7 +101,7 @@ class ConferenceRoom:
         members_str = ", ".join(self.members) or "you"
         await send_cb(
             f"\r\n*** Entering room {self.name}.  Members: {members_str}\r\n"
-            f"*** /WHO=list  /L=rooms  /J room=switch  /X=exit\r\n\r\n"
+            f"*** /W=who  /L=rooms  /J room=switch  /X=exit\r\n\r\n"
         )
         await self._broadcast(f"*** {call} has joined {self.name}\r\n", exclude_key=key)
 
