@@ -140,6 +140,7 @@ class CommandEngine:
             # Kill
             "K":       self._cmd_kill,
             "KM":      self._cmd_kill_mine,
+            "KK":      self._cmd_kill_bulk,          # bulk kill by type/criteria
             "D":       self._cmd_kill,               # legacy alias
             "KILL":    self._cmd_kill,               # long form
             "RM":      self._cmd_kill,               # MSYS alias
@@ -152,7 +153,14 @@ class CommandEngine:
             "NB":      self._cmd_nb,
             # Forwarding (sysop)
             "F":       self._cmd_forward,
+            "FL":      self._cmd_forward_list,       # list forward queue
+            "FN":      self._cmd_forward_path,       # show BBSes for a message
+            "FD":      self._cmd_forward_drop,       # remove from forward queue
+            "FW":      self._cmd_forward_start,      # start forwarding session
+            "FS":      self._cmd_forward_stop,       # stop forwarding
             # Sysop message management
+            "$":       self._cmd_msg_status,         # show forwarding status
+            "EM":      self._cmd_edit_body,          # edit message body only
             "ED":      self._cmd_edit_terminal,
             "MOVE":    self._cmd_move,
             # Status / info
@@ -173,6 +181,12 @@ class CommandEngine:
             "SR":      self._cmd_sysop_release,
             "MR":      self._cmd_sysop_release,  # FBB alias
             "U":       self._cmd_users,
+            "DU":      self._cmd_user_detail,    # display full user record
+            "DS":      self._cmd_sysop_list,     # list sysop users
+            "EU":      self._cmd_user_edit,      # edit user record inline
+            # White Pages sysop
+            "IL":      self._cmd_wp_detail,      # detailed WP record view
+            "IE":      self._cmd_wp_edit,        # edit WP record
             # File transfer
             "Y":       self._cmd_yapp_list,   # bare Y = list files
             "YL":      self._cmd_yapp_list,
@@ -1175,6 +1189,150 @@ class CommandEngine:
         await self._s.send(s.get("kill.ok", id=msg_id))
         LOG.info("session: %s killed message %d", self._user.call, msg_id)
 
+    async def _cmd_kill_bulk(self, args: str) -> None:
+        """KK / K> / K< / K@ / KF — bulk kill by type or criteria.
+
+        KK          kill all killed (purge — same as sweeping K)
+        K> call     kill all messages FROM call
+        K< call     kill all messages TO call
+        K@ bbs      kill all messages addressed @bbs
+        KF          kill all forwarded messages
+        KK T        kill all NTS traffic
+        KK B        kill all bulletins
+        KK P        kill all personal mail (sysop only)
+        """
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+
+        arg = args.strip().upper()
+        msgs: list = []
+
+        if arg.startswith(">"):
+            call = arg[1:].strip()
+            if not call:
+                await self._s.send("\r\n  Usage: K> <callsign>\r\n")
+                return
+            msgs = await self._store.list_messages(from_call=call)
+        elif arg.startswith("<"):
+            call = arg[1:].strip()
+            if not call:
+                await self._s.send("\r\n  Usage: K< <callsign>\r\n")
+                return
+            msgs = await self._store.list_messages(to_call=call)
+        elif arg.startswith("@"):
+            bbs = arg[1:].strip()
+            if not bbs:
+                await self._s.send("\r\n  Usage: K@ <bbs>\r\n")
+                return
+            all_msgs = await self._store.list_messages()
+            msgs = [m for m in all_msgs if m.at_bbs.upper() == bbs]
+        elif arg == "F":
+            msgs = await self._store.list_messages(status=STATUS_FORWARDED)
+        elif arg in ("T", "B", "P"):
+            type_map = {"T": MSG_NTS, "B": MSG_BULLETIN, "P": MSG_PRIVATE}
+            msgs = await self._store.list_messages(msg_type=type_map[arg])
+        elif not arg:
+            await self._s.send(
+                "\r\n  Usage: KK <T|B|P|F>  or  K> <call>  K< <call>  K@ <bbs>\r\n"
+            )
+            return
+        else:
+            await self._s.send(
+                "\r\n  Unknown KK option. Use: T B P F or K>/K</K@\r\n"
+            )
+            return
+
+        if not msgs:
+            await self._s.send("\r\n  No messages match.\r\n")
+            return
+
+        count = 0
+        for m in msgs:
+            if m.status != STATUS_KILLED:
+                await self._store.kill_message(m.id)
+                count += 1
+        await self._s.send(f"\r\n  {count} message(s) killed.\r\n")
+        LOG.info("session: sysop %s bulk-killed %d messages (arg=%r)",
+                 self._user.call, count, arg)
+
+    # ------------------------------------------------------------------
+    # $ msg# — show forwarding status / path for a message  [sysop]
+    # ------------------------------------------------------------------
+
+    async def _cmd_msg_status(self, args: str) -> None:
+        """$ msg# — display forwarding path and status for a message."""
+        ids = self._parse_id_list(args)
+        if not ids:
+            await self._s.send("\r\n  Usage: $ <msg#>\r\n")
+            return
+        msg = await self._store.get_message(ids[0])
+        if msg is None:
+            await self._s.send(self._st.get("read.not_found", id=ids[0]))
+            return
+        date_str = msg.created_at.strftime("%Y-%m-%d %H:%M UTC") if msg.created_at else "?"
+        path = msg.forward_path or "(none)"
+        at   = f"@{msg.at_bbs}" if msg.at_bbs else ""
+        await self._s.send(
+            f"\r\n  Msg    : {msg.id}  ({msg.msg_type})  [{msg.status}]\r\n"
+            f"  BID    : {msg.bid}\r\n"
+            f"  From   : {msg.from_call}  →  {msg.to_call}{at}\r\n"
+            f"  Date   : {date_str}\r\n"
+            f"  Subject: {msg.subject}\r\n"
+            f"  Path   : {path}\r\n"
+        )
+
+    # ------------------------------------------------------------------
+    # EM msg# — sysop: edit message body only
+    # ------------------------------------------------------------------
+
+    async def _cmd_edit_body(self, args: str) -> None:
+        """EM msg# — edit only the body of a message."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        ids = self._parse_id_list(args)
+        if not ids:
+            await self._s.send("\r\n  Usage: EM <msg#>\r\n")
+            return
+        msg = await self._store.get_message(ids[0])
+        if msg is None:
+            await self._s.send(self._st.get("read.not_found", id=ids[0]))
+            return
+        if msg.status == STATUS_KILLED:
+            await self._s.send(self._st.get("read.killed", id=ids[0]))
+            return
+
+        await self._s.send(
+            f"\r\n  Editing body of message {ids[0]}\r\n"
+            f"  Current body ({msg.size} bytes) follows:\r\n\r\n"
+        )
+        await self._s.send(msg.body.replace("\n", "\r\n") + "\r\n")
+        await self._s.send(
+            "\r\n  --- Enter new body, /EX to finish, /AB to abort ---\r\n"
+        )
+
+        body_lines: list[str] = []
+        while True:
+            line = await self._s._readline()
+            if line.strip() in ("/AB", "/ab"):
+                await self._s.send(self._st.get("error.aborted"))
+                return
+            if line.strip() in ("/EX", "/ex", "\x1a", "***"):
+                break
+            body_lines.append(line)
+
+        new_body = "\n".join(body_lines).strip() if body_lines else msg.body
+        await self._store.update_message(
+            ids[0],
+            subject=msg.subject,
+            body=new_body,
+            edited_by=self._user.call,
+            edited_at=datetime.now(timezone.utc),
+        )
+        await self._s.send(f"\r\n  Message {ids[0]} body updated.\r\n")
+        LOG.info("session: sysop %s edited body of message %d", self._user.call, ids[0])
+
     # ------------------------------------------------------------------
     # O — options (includes O PW for password change)
     # ------------------------------------------------------------------
@@ -1382,6 +1540,102 @@ class CommandEngine:
         await self._s.send("".join(lines))
 
     # ------------------------------------------------------------------
+    # FL / FN / FD / FW / FS — forward queue management  [sysop]
+    # ------------------------------------------------------------------
+
+    async def _cmd_forward_list(self, args: str) -> None:
+        """FL [bbs] — list messages pending forwarding (optionally to a specific BBS)."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        bbs_filter = args.strip().upper() or None
+        msgs = await self._store.list_messages(status=STATUS_NEW, msg_type=MSG_BULLETIN)
+        # Include private mail addressed to a remote BBS
+        priv = await self._store.list_messages(status=STATUS_NEW, msg_type=MSG_PRIVATE)
+        node_call = self._cfg.node.node_call.upper().split("-")[0]
+        # Private mail is pending forward if at_bbs is set and differs from us
+        remote_priv = [m for m in priv if m.at_bbs and m.at_bbs.upper() != node_call]
+        pending = msgs + remote_priv
+        if bbs_filter:
+            pending = [m for m in pending if m.at_bbs.upper() == bbs_filter]
+        if not pending:
+            bbs_str = f" to {bbs_filter}" if bbs_filter else ""
+            await self._s.send(f"\r\n  No messages pending forward{bbs_str}.\r\n")
+            return
+        lines = [
+            "\r\n",
+            f"  {'#':>5}  TS  {'To':<12} {'At BBS':<10} {'From':<10}  Subject\r\n",
+            "  " + "-" * 65 + "\r\n",
+        ]
+        for m in pending:
+            lines.append(
+                f"  {m.id:>5}  {m.msg_type}{m.status}"
+                f"  {m.to_call[:12]:<12} {(m.at_bbs or '')[:10]:<10}"
+                f" {m.from_call[:10]:<10}  {m.subject[:30]}\r\n"
+            )
+        lines.append(f"\r\n  {len(pending)} message(s) pending.\r\n")
+        await self._s.send_paged("".join(lines))
+
+    async def _cmd_forward_path(self, args: str) -> None:
+        """FN msg# — list BBSes a message has been forwarded to."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        ids = self._parse_id_list(args)
+        if not ids:
+            await self._s.send("\r\n  Usage: FN <msg#>\r\n")
+            return
+        msg = await self._store.get_message(ids[0])
+        if msg is None:
+            await self._s.send(self._st.get("read.not_found", id=ids[0]))
+            return
+        path = msg.forward_path.split() if msg.forward_path else []
+        at   = f"@{msg.at_bbs}" if msg.at_bbs else ""
+        await self._s.send(
+            f"\r\n  Msg {msg.id}: {msg.to_call}{at}  [{msg.status}]\r\n"
+            f"  Forward path: {' → '.join(path) if path else '(none)'}\r\n"
+        )
+
+    async def _cmd_forward_drop(self, args: str) -> None:
+        """FD msg# BBS — remove a message from the forward queue to a specific BBS."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        parts = args.split(None, 1)
+        if len(parts) < 2:
+            await self._s.send("\r\n  Usage: FD <msg#> <bbs>\r\n")
+            return
+        try:
+            msg_id = int(parts[0])
+        except ValueError:
+            await self._s.send("\r\n  Usage: FD <msg#> <bbs>\r\n")
+            return
+        bbs = parts[1].strip().upper()
+        msg = await self._store.get_message(msg_id)
+        if msg is None:
+            await self._s.send(self._st.get("read.not_found", id=msg_id))
+            return
+        # Append BBS to forward_path so it's treated as already forwarded there
+        await self._store.append_forward_path(msg_id, bbs)
+        await self._s.send(f"\r\n  Msg {msg_id} marked as already forwarded to {bbs}.\r\n")
+        LOG.info("session: sysop %s dropped fwd of msg %d to %s", self._user.call, msg_id, bbs)
+
+    async def _cmd_forward_start(self, args: str) -> None:
+        """FW [bbs] — manually start a forwarding session."""
+        # Alias to F — reuse existing handler
+        await self._cmd_forward(args)
+
+    async def _cmd_forward_stop(self, args: str) -> None:
+        """FS — placeholder; forwarding sessions are short-lived TCP connections."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        await self._s.send(
+            "\r\n  Forwarding sessions are short-lived; there is nothing to stop.\r\n"
+            "  Use F to start a session or check the forward scheduler logs.\r\n"
+        )
+
+    # ------------------------------------------------------------------
     # SH / MH — sysop hold message(s)
     # ------------------------------------------------------------------
 
@@ -1448,6 +1702,144 @@ class CommandEngine:
             )
         lines.append(f"\r\n  {len(users)} user(s).\r\n")
         await self._s.send_paged("".join(lines))
+
+    # ------------------------------------------------------------------
+    # DU / DS / EU — user detail / sysop list / user edit  [sysop]
+    # ------------------------------------------------------------------
+
+    async def _cmd_user_detail(self, args: str) -> None:
+        """DU <callsign> — display full user record."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        call = args.strip().upper()
+        if not call:
+            await self._s.send("\r\n  Usage: DU <callsign>\r\n")
+            return
+        u = await self._store.get_user(call)
+        if u is None:
+            await self._s.send(f"\r\n  User {call} not found.\r\n")
+            return
+        last = u.last_login_at.strftime("%Y-%m-%d %H:%M UTC") if u.last_login_at else "never"
+        msgs = await self._store.count_messages(to_call=call)
+        new  = await self._store.count_messages(to_call=call, status=STATUS_NEW)
+        await self._s.send(
+            f"\r\n  Callsign  : {u.call}\r\n"
+            f"  Name      : {u.display_name or '(not set)'}\r\n"
+            f"  Privilege : {u.privilege or 'user'}\r\n"
+            f"  Home BBS  : {u.home_bbs or '(not set)'}\r\n"
+            f"  Locator   : {u.locator or '(not set)'}\r\n"
+            f"  City/QTH  : {u.city or '(not set)'}\r\n"
+            f"  ZIP       : {u.zip_code or '(not set)'}\r\n"
+            f"  Language  : {u.language or 'en'}\r\n"
+            f"  Expert    : {'on' if u.expert_mode else 'off'}\r\n"
+            f"  Msg base  : {u.msg_base}\r\n"
+            f"  Last login: {last}\r\n"
+            f"  Messages  : {msgs} total, {new} new\r\n"
+        )
+
+    async def _cmd_sysop_list(self, args: str) -> None:
+        """DS — list all sysop-privileged users."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        users = await self._store.list_users(privilege=PRIV_SYSOP)
+        if not users:
+            await self._s.send("\r\n  No sysop users found.\r\n")
+            return
+        lines = ["\r\n", f"  {'Call':<12} {'Name':<24}  Last login\r\n",
+                 "  " + "-" * 55 + "\r\n"]
+        for u in users:
+            last = u.last_login_at.strftime("%Y-%m-%d %H:%M") if u.last_login_at else "never"
+            lines.append(f"  {u.call:<12} {(u.display_name or '')[:24]:<24}  {last}\r\n")
+        lines.append(f"\r\n  {len(users)} sysop(s).\r\n")
+        await self._s.send("".join(lines))
+
+    async def _cmd_user_edit(self, args: str) -> None:
+        """EU <callsign> — interactively edit a user record."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        call = args.strip().upper()
+        if not call:
+            await self._s.send("\r\n  Usage: EU <callsign>\r\n")
+            return
+        u = await self._store.get_user(call)
+        if u is None:
+            await self._s.send(f"\r\n  User {call} not found.\r\n")
+            return
+
+        async def _prompt(label: str, current: str) -> str:
+            await self._s.send(f"  {label} [{current or '(none)'}]: ")
+            val = (await self._s._readline()).strip()
+            return val if val else current
+
+        await self._s.send(f"\r\n  Editing user {u.call}  (blank = keep current)\r\n\r\n")
+        u.display_name = await _prompt("Name     ", u.display_name or "")
+        u.home_bbs     = (await _prompt("Home BBS ", u.home_bbs or "")).upper()
+        u.locator      = (await _prompt("Locator  ", u.locator or "")).upper()
+        u.city         = await _prompt("City/QTH ", u.city or "")
+        u.zip_code     = await _prompt("ZIP      ", u.zip_code or "")
+        u.language     = (await _prompt("Language ", u.language or "en")).lower()
+
+        await self._s.send(f"  Privilege [{u.privilege or 'user'}] (user/sysop/blank): ")
+        priv_in = (await self._s._readline()).strip().lower()
+        if priv_in in ("user", "sysop", ""):
+            if priv_in:
+                u.privilege = priv_in
+
+        await self._store.upsert_user(u)
+        await self._s.send(f"\r\n  User {u.call} updated.\r\n")
+        LOG.info("session: sysop %s edited user %s", self._user.call, u.call)
+
+    # ------------------------------------------------------------------
+    # IL / IE — WP record view / edit  [sysop]
+    # ------------------------------------------------------------------
+
+    async def _cmd_wp_detail(self, args: str) -> None:
+        """IL <callsign> — display full White Pages record."""
+        call = args.strip().upper()
+        if not call:
+            await self._s.send("\r\n  Usage: IL <callsign>\r\n")
+            return
+        entry = await self._store.get_wp_entry(call)
+        if entry is None:
+            await self._s.send(f"\r\n  No WP entry for {call}.\r\n")
+            return
+        updated = entry.updated_at.strftime("%Y-%m-%d %H:%M UTC") if entry.updated_at else "?"
+        await self._s.send(
+            f"\r\n  Callsign  : {entry.call}\r\n"
+            f"  Name      : {entry.name or '(not set)'}\r\n"
+            f"  Home BBS  : {entry.home_bbs or '(not set)'}\r\n"
+            f"  Source BBS: {entry.source_bbs or '(not set)'}\r\n"
+            f"  Updated   : {updated}\r\n"
+        )
+
+    async def _cmd_wp_edit(self, args: str) -> None:
+        """IE <callsign> — interactively edit a White Pages record."""
+        if self._user.privilege != PRIV_SYSOP:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        call = args.strip().upper()
+        if not call:
+            await self._s.send("\r\n  Usage: IE <callsign>\r\n")
+            return
+        from ..store.models import WPEntry
+        entry = await self._store.get_wp_entry(call) or WPEntry(call=call)
+
+        async def _prompt(label: str, current: str) -> str:
+            await self._s.send(f"  {label} [{current or '(none)'}]: ")
+            val = (await self._s._readline()).strip()
+            return val if val else current
+
+        await self._s.send(f"\r\n  Editing WP record for {call}  (blank = keep current)\r\n\r\n")
+        entry.name      = await _prompt("Name     ", entry.name or "")
+        entry.home_bbs  = (await _prompt("Home BBS ", entry.home_bbs or "")).upper()
+        entry.source_bbs = self._cfg.node.node_call
+
+        await self._store.upsert_wp_entry(entry)
+        await self._s.send(f"\r\n  WP record for {call} updated.\r\n")
+        LOG.info("session: sysop %s edited WP record for %s", self._user.call, call)
 
     # ------------------------------------------------------------------
     # YL [area] — list files
