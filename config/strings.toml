@@ -45,38 +45,34 @@ Commands (?<cmd>=detail  ??=full list):\r
 """
 
 short = """\r
- Reading\r
-  L  List msgs       LL  Last n msgs\r
-  LM My mail         LB  Bulletins\r
-  LN New since login LR  List reverse\r
-  LW WW bulletins    LS  Search msgs\r
-  LD Since date      LK  Killed msgs\r
-  LH Held msgs       LF  Forwarded\r
-  R  Read msg(s)     RA  All new mail\r
-  N  New msg count\r
- Sending\r
-  S  Personal mail   SB  Bulletin\r
-  ST NTS traffic     SC  Copy msg\r
-  RP Reply to msg\r
- Manage\r
-  K  Kill msg(s)     KM  Kill my mail\r
-  NB Home BBS        NH  Display name\r
-  NL Locator         NQ  QTH/city\r
-  NZ ZIP code        O   Options\r
-  X  Toggle expert mode\r
- Info\r
-  I  Node/WP info    P   WP lookup\r
-  WPS Search WP      W   Who is here\r
-  WHOAMI My profile  DATE UTC time\r
-  STATS  Node stats  BBS  Neighbors\r
-  V  Version         J   Heard (RF)\r
- Other\r
-  C  Conference      T   Page SYSOP\r
-  Y  YAPP files      B   Bye\r
-  H/?  Help          ??  This list\r
-SYSOP: SH SR ED EM MOVE $ KK FL FN FD F\r
-       DU DS EU IL IE\r
-?<cmd> for details  e.g. ?L ?S ?K ?F ?U\r
+  L      List msgs from base           LL     List last N messages\r
+  LM     Personal mail                 LB     Bulletins [category]\r
+  LN     New since login               LR     List reversed\r
+  LW     Worldwide bulletins           LS     Search msgs\r
+  LD     Since date (MMDD)             LH     Held messages\r
+  LK     Killed messages               LF     Forwarded messages\r
+  R      Read message(s)               RA     Read all new mail\r
+  RP     Reply to message              N      New msg count/advance\r
+  S/SP   Send personal mail            SB     Send bulletin [cat]\r
+  ST/SN  Send NTS radiogram            SC     Copy message\r
+  K      Kill message(s)               KM     Kill all my mail\r
+  NH     Set display name              NL     Set locator (e.g. FN20)\r
+  NQ     Set QTH/city                  NZ     Set ZIP code\r
+  NB     Set home BBS                  O      Options (pager/pw/etc)\r
+  X      Toggle expert mode            I/P    Node info / WP lookup\r
+  WPS    Search white pages            W      Who is connected\r
+  V      Software version              J      Heard stations (RF)\r
+  BBS    Neighbor nodes                DATE   Current UTC time\r
+  STATS  Node statistics               WHOAMI My profile\r
+  C      Conference chat               T      Page system operator\r
+  Y/YL   YAPP file list                B      Bye/disconnect\r
+  SH/SR  Hold/release msg   [sysop]    ED/EM  Edit message   [sysop]\r
+  MOVE   Reassign recipient [sysop]    $      Msg status     [sysop]\r
+  KK     Bulk kill by type  [sysop]    K>/K<  Kill by from/to[sysop]\r
+  K@     Kill msgs at BBS   [sysop]    U/DU   List/view user [sysop]\r
+  DS/EU  Sysop list/edit    [sysop]    IL/IE  WP view/edit   [sysop]\r
+  F/FL   Forward/fwd queue  [sysop]    FN/FD  Path/drop fwd  [sysop]\r
+?<cmd> detail  e.g. ?L ?S ?K ?F ?U ?IL\r
 """
 
 banner = "\r\npyBulletin — {branding} [{node_call}] — {version}\r\n"
