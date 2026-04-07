@@ -189,6 +189,27 @@ async def _serve_core(config_path: str) -> None:
         pactor_link.start()
         LOG.info("serve-core: PACTOR on %s at %d baud", cfg.pactor.device, cfg.pactor.baud)
 
+    # --- Periodic forward scheduler ---
+    fwd_task = None
+    if cfg.forward.enabled:
+        from .forward.scheduler import ForwardScheduler
+
+        fwd_scheduler = ForwardScheduler(cfg, store)
+
+        async def _fwd_loop():
+            import time as _time
+            sleep = 60 - (_time.time() % 60)
+            await asyncio.sleep(sleep)
+            while True:
+                try:
+                    await fwd_scheduler.run_once()
+                except Exception as exc:
+                    LOG.warning("serve-core: forward scheduler error: %s", exc)
+                await asyncio.sleep(60)
+
+        fwd_task = asyncio.create_task(_fwd_loop(), name="forward-scheduler")
+        LOG.info("serve-core: forward scheduler started")
+
     # --- Run until signal ---
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -199,6 +220,12 @@ async def _serve_core(config_path: str) -> None:
     await stop.wait()
     LOG.info("serve-core: shutting down")
 
+    if fwd_task:
+        fwd_task.cancel()
+        try:
+            await fwd_task
+        except asyncio.CancelledError:
+            pass
     if beacon:
         beacon.stop()
     if pactor_link:
@@ -471,6 +498,28 @@ async def _serve(config_path: str) -> None:
         )
         pactor_link.start()
 
+    # --- Periodic forward scheduler ---
+    fwd_task = None
+    if cfg.forward.enabled:
+        from .forward.scheduler import ForwardScheduler
+
+        fwd_scheduler = ForwardScheduler(cfg, store)
+
+        async def _fwd_loop():
+            # Align to the next whole minute, then tick every 60 s — mirrors cron.
+            import time as _time
+            sleep = 60 - (_time.time() % 60)
+            await asyncio.sleep(sleep)
+            while True:
+                try:
+                    await fwd_scheduler.run_once()
+                except Exception as exc:
+                    LOG.warning("serve: forward scheduler error: %s", exc)
+                await asyncio.sleep(60)
+
+        fwd_task = asyncio.create_task(_fwd_loop(), name="forward-scheduler")
+        LOG.info("serve: forward scheduler started")
+
     # --- Run until signal ---
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -481,6 +530,12 @@ async def _serve(config_path: str) -> None:
     await stop.wait()
     LOG.info("serve: shutting down")
 
+    if fwd_task:
+        fwd_task.cancel()
+        try:
+            await fwd_task
+        except asyncio.CancelledError:
+            pass
     if beacon:
         beacon.stop()
     if pactor_link:
