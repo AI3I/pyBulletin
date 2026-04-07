@@ -210,35 +210,14 @@ class _HuffmanTree:
 
     def encode_char(self, c: int, writer: _BitWriter) -> None:
         """Write the Huffman code for symbol *c*."""
-        prnt = self.prnt
-        i    = 0
-        j    = 0
-        k    = prnt[c + T]
-        # Trace path from leaf to root, accumulating bits
-        while k != R:
-            i = (i << 1) | (1 if son[k] != (c if j == 0 else -1) else 0)
-            # Simpler: check which child we came from
-            j += 1
-            c = k
-            k = prnt[k]
-        # Reverse and write
-        # Re-implement cleanly: walk from leaf to root collecting bits
-        son = self.son
+        son      = self.son
+        prnt     = self.prnt
+        sym_node = c          # save original symbol index
         bits: list[int] = []
-        node = c + T  # start at leaf
-        # Reset and walk properly
-        bits = []
-        node = c
-        # Proper implementation: start fresh
-        bits = []
-        code_node = prnt[c + T]  # parent of original symbol? No — redo this properly.
-        # Clean encoding: traverse from leaf upward
-        bits = []
-        sym_node = c  # save original symbol
-        cur = prnt[sym_node + T]
+        cur  = prnt[sym_node + T]
         prev = sym_node + T
         while True:
-            # bit = 0 if prev is left child (son[cur]), 1 if right
+            # bit = 0 if prev is left child (son[cur]), 1 if right child
             bits.append(0 if son[cur] == prev else 1)
             if cur == R:
                 break

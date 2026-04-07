@@ -50,7 +50,9 @@ CREATE TABLE IF NOT EXISTS messages (
     read_by      TEXT    NOT NULL DEFAULT '',
     created_at   INTEGER NOT NULL,
     expires_at   INTEGER,
-    read_at      INTEGER
+    read_at      INTEGER,
+    edited_by    TEXT    NOT NULL DEFAULT '',
+    edited_at    INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_to_call   ON messages (to_call);
