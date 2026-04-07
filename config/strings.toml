@@ -34,43 +34,49 @@ locked_out     = "\r\n? Access denied.\r\n"
 # ---------------------------------------------------------------------------
 
 [help]
+compact = """\r
+Commands (?<cmd>=detail  ??=full list):\r
+ List: L  LL LM LB LN LR LW LS LD LH LF LK\r
+ Msg : R  RA RP\r
+ Send: S  SB ST SC\r
+ Mgmt: K  KM N  NH NL NQ NZ NB O  X\r
+ Info: I  P  WPS W  V  J  C  T  Y\r
+ Bye : B\r
+"""
+
 short = """\r
  Reading\r
-  L      List messages         LL     List last n msgs\r
-  LM     List my mail          LB     List bulletins\r
-  LN     New since login       LR     List reverse\r
-  LW     List WW bulletins     LS     Search messages\r
-  LD     List since date       LK     List killed\r
-  LH     List held             LF     List forwarded\r
-  R      Read message(s)       RA     Read all new mail\r
-  N      New msg summary\r
-\r
+  L  List msgs       LL  Last n msgs\r
+  LM My mail         LB  Bulletins\r
+  LN New since login LR  List reverse\r
+  LW WW bulletins    LS  Search msgs\r
+  LD Since date      LK  Killed msgs\r
+  LH Held msgs       LF  Forwarded\r
+  R  Read msg(s)     RA  All new mail\r
+  N  New msg count\r
  Sending\r
-  S      Send personal mail    SB     Send bulletin\r
-  ST     Send NTS traffic      SC     Copy message\r
-  RP     Reply to message\r
-\r
+  S  Personal mail   SB  Bulletin\r
+  ST NTS traffic     SC  Copy msg\r
+  RP Reply to msg\r
  Manage\r
-  K      Kill message(s)       KM     Kill all my mail\r
-  NB     Set home BBS          NH     Set display name\r
-  NL     Set locator           NQ     Set QTH / city\r
-  NZ     Set ZIP code          O      Options\r
-  X      Toggle expert mode\r
-\r
+  K  Kill msg(s)     KM  Kill my mail\r
+  NB Home BBS        NH  Display name\r
+  NL Locator         NQ  QTH/city\r
+  NZ ZIP code        O   Options\r
+  X  Toggle expert mode\r
  Info\r
-  I      Node info / WP lookup P      WP lookup (alias)\r
-  WPS    Search white pages    W      Who is connected\r
-  WHOAMI Show my profile       DATE   Current UTC time\r
-  STATS  Node statistics       BBS    Neighbor nodes\r
-  V      Version               J      Heard stations\r
-\r
+  I  Node/WP info    P   WP lookup\r
+  WPS Search WP      W   Who is here\r
+  WHOAMI My profile  DATE UTC time\r
+  STATS  Node stats  BBS  Neighbors\r
+  V  Version         J   Heard (RF)\r
  Other\r
-  C      Conference chat       T      Page SYSOP\r
-  Y      YAPP file transfer    B      Bye (disconnect)\r
-  H / ?  Help\r
-\r
-SYSOP: SH SR ED MOVE F U\r
-Type ?<cmd> for details  e.g. ?L  ?S  ?K\r
+  C  Conference      T   Page SYSOP\r
+  Y  YAPP files      B   Bye\r
+  H/?  Help          ??  This list\r
+SYSOP: SH SR ED EM MOVE $ KK FL FN FD F\r
+       DU DS EU IL IE\r
+?<cmd> for details  e.g. ?L ?S ?K ?F ?U\r
 """
 
 banner = "\r\npyBulletin — {branding} [{node_call}] — {version}\r\n"
@@ -128,18 +134,6 @@ End the body with /EX or Ctrl-Z (^Z) on a line by itself.\r
 Abort with /AB.\r
 """
 
-K = """\r
-K n [n ...]          kill (delete) message(s) by number\r
-D / KILL / RM n ...  aliases for K\r
-                     You may only kill messages you sent or received.\r
-KM                   kill all of your personal mail\r
-\r
-System Operator (SYSOP):\r
-SH n [n ...]   hold message(s) — prevents forwarding\r
-SR n [n ...]   release held message(s) back to normal\r
-ED n           interactively edit subject and body of message n\r
-MOVE n <call[@bbs]>  reassign message n to a different recipient\r
-"""
 
 N = """\r
 N            show new-message count and advance your message base\r
@@ -203,15 +197,49 @@ YAPP is supported by most packet terminal programs (TelePac, KAM, etc.).\r
 SH = """\r
 SH n [n ...]   hold message(s) — prevents forwarding  [SYSOP]\r
 SR n [n ...]   release held message(s) back to normal  [SYSOP]\r
+ED n           interactively edit subject and body of message n  [SYSOP]\r
+EM n           edit message body only  [SYSOP]\r
+MOVE n call[@bbs]  reassign message to a different recipient  [SYSOP]\r
+$ n            show forwarding path and status for message n  [SYSOP]\r
+"""
+
+K = """\r
+K n [n ...]          kill (delete) message(s) by number\r
+D / KILL / RM n ...  aliases for K\r
+                     You may only kill messages you sent or received.\r
+KM                   kill all of your personal mail\r
+\r
+System Operator (SYSOP) bulk kill:\r
+KK T           kill all NTS traffic\r
+KK B           kill all bulletins\r
+KK P           kill all personal mail\r
+KK F           kill all forwarded messages\r
+K> <call>      kill all messages FROM <call>\r
+K< <call>      kill all messages TO <call>\r
+K@ <bbs>       kill all messages addressed @<bbs>\r
 """
 
 U = """\r
-U [search]  list registered users; optionally filter by partial callsign  [SYSOP]\r
+U [search]     list registered users  [SYSOP]\r
+DU <call>      display full user record  [SYSOP]\r
+DS             list all System Operator (SYSOP) users  [SYSOP]\r
+EU <call>      edit user record (name, home BBS, privilege, etc.)  [SYSOP]\r
 """
 
 F = """\r
-F              trigger outbound forwarding to all enabled neighbor nodes  [SYSOP]\r
-F <call>       trigger outbound forwarding to a specific neighbor\r
+F [call]       trigger outbound forwarding to all (or one) neighbor  [SYSOP]\r
+FW [call]      same as F — start forwarding session\r
+FL [bbs]       list messages pending forwarding  [SYSOP]\r
+FN n           show which BBSes message n has been forwarded to  [SYSOP]\r
+FD n <bbs>     mark message n as already forwarded to <bbs>  [SYSOP]\r
+FS             show forwarding session status  [SYSOP]\r
+"""
+
+IL = """\r
+IL <call>      display full White Pages record for <call>\r
+IE <call>      edit White Pages record (name, home BBS)  [SYSOP]\r
+WPS <name>     search White Pages by name or partial callsign\r
+I <call>       look up <call> (brief WP view)\r
 """
 
 # ---------------------------------------------------------------------------

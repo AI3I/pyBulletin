@@ -260,23 +260,28 @@ class CommandEngine:
         "LH": "L", "LK": "L", "LF": "L", "LY": "L",
         "LA": "L", "LW": "L", "LS": "L", "LD": "L", "LN": "L", "LR": "L",
         "SC": "S", "SN": "S",
-        "KM": "K", "D": "K", "KILL": "K", "RM": "K",
+        "KM": "K", "D": "K", "KILL": "K", "RM": "K", "KK": "K",
         "MH": "SH", "MR": "SR",
+        "EM": "SH", "ED": "SH", "MOVE": "SH", "$": "SH",
         "YG": "Y", "YU": "Y", "YL": "Y",
         "NH": "N", "NL": "N", "NQ": "N", "NZ": "N", "NB": "N",
         "RA": "R",
-        "P": "I", "WPS": "I",
+        "P": "I", "WPS": "I", "BBS": "I",
+        "IL": "IL", "IE": "IL",
         "WHO": "W", "WHOAMI": "W",
         "DATE": "V", "TIME": "V",
         "STATS": "V",
         "X": "O",
-        "BBS": "I",
-        "ED": "K", "MOVE": "K",
+        "DU": "U", "DS": "U", "EU": "U",
+        "FL": "F", "FN": "F", "FD": "F", "FW": "F", "FS": "F",
     }
 
     async def _cmd_help(self, args: str) -> None:
         cmd = args.strip().upper()
         if not cmd:
+            await self._s.send(self._st.get("help.compact"))
+            return
+        if cmd == "?":
             await self._s.send(self._st.get("help.short"))
             return
         # Resolve alias to canonical name
