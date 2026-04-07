@@ -41,6 +41,53 @@ python -m pip install -e ".[tnc]"
 
 ---
 
+## Deployment (Linux / systemd)
+
+The `deploy/` directory contains scripts for a production install on any systemd-based Linux distribution (Debian, Ubuntu, Fedora, Raspberry Pi OS, etc.).
+
+```bash
+# Install (run as root)
+sudo bash deploy/install.sh
+
+# Upgrade to a newer version
+sudo bash deploy/upgrade.sh
+
+# Remove completely
+sudo bash deploy/uninstall.sh
+```
+
+`install.sh` will:
+- Create a dedicated `pybulletin` system user and group
+- Install the package into `/opt/pybulletin`
+- Install and enable systemd units:
+  - `pybulletin.service` — main BBS (Telnet + web)
+  - `pybulletin-web.service` — public web interface (if enabled)
+  - `pybulletin-forward.service` / `.timer` — scheduled forwarding
+  - `pybulletin-retention.service` / `.timer` — nightly message cleanup
+- Drop a starter config at `/etc/pybulletin/pybulletin.toml`
+
+### Additional deploy scripts
+
+| Script | Purpose |
+|--------|---------|
+| `deploy/setup-nginx.sh` | Configure nginx as reverse proxy for the web interfaces |
+| `deploy/doctor.sh` | Diagnose common configuration and permission problems |
+| `deploy/migrate.sh` | Run schema migrations on an existing database |
+| `deploy/repair.sh` | Attempt to repair a corrupted SQLite database |
+| `deploy/fail2ban/` | fail2ban filter and jail for Telnet brute-force protection |
+| `deploy/logrotate/` | logrotate config for `/var/log/pybulletin/` |
+
+### Helper scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/bootstrap_sysop.py` | Create the initial sysop account |
+| `scripts/backup.py` | Hot backup of the SQLite database |
+| `scripts/cleanup_retention.py` | Manually trigger message retention cleanup |
+| `scripts/migrate_fbb.py` | Import messages from a LinFBB message directory |
+
+---
+
 ## Quick Start
 
 ```bash
@@ -63,6 +110,71 @@ The BBS listens on:
 | Sysop web console | `127.0.0.1:8080` | `[web] host / port` |
 | B2F inbound forward | `0.0.0.0:6301` | `[forward] listen_host / listen_port` |
 | Public web (opt.) | `127.0.0.1:8081` | `[public_web] host / port` |
+
+---
+
+## Web Interfaces
+
+pyBulletin ships two browser-based interfaces served from the same process.
+
+### Sysop Console (`/sysop`)
+
+A token-authenticated single-page application for node operators. Accessible at `http://127.0.0.1:8080/sysop` by default (bind to loopback and proxy via nginx for external access).
+
+**Capabilities:**
+- Message browser — read, hold, release, kill, search across all traffic
+- User management — list users, set privilege (user/sysop), reset passwords, delete accounts
+- White Pages — look up and edit WP entries
+- Neighbor management — view configured forward neighbors and runtime stats
+- Node config — edit `[node]`, `[telnet]`, `[forward]`, and `[retention]` settings live
+- Statistics dashboard — message counts, connected sessions, forwarding history
+- Live session monitor — see who is connected and on which transport
+
+Authentication uses a long-lived bearer token set in `[web] admin_token`. Every request to `/api/*` (except `/api/health`) requires the header `Authorization: Bearer <token>`.
+
+### Public BBS (`/`)
+
+An optional read-only message board for non-amateur visitors. Disabled by default; enable in `[public_web]`.
+
+**Shows:**
+- Bulletin and NTS message listings
+- Individual message view
+- White Pages search
+
+Enable with:
+
+```toml
+[public_web]
+enabled = true
+host    = "127.0.0.1"
+port    = 8081
+```
+
+Proxy port 8081 through nginx (or any reverse proxy) for public internet access. Personal mail is never exposed through the public interface.
+
+### REST API
+
+Both interfaces are backed by a JSON REST API:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/health` | Node health (unauthenticated) |
+| `POST` | `/api/auth/login` | Obtain session token |
+| `GET` | `/api/messages` | List messages |
+| `GET` | `/api/messages/{id}` | Read message |
+| `POST` | `/api/messages` | Send message |
+| `DELETE` | `/api/messages/{id}` | Kill message |
+| `POST` | `/api/messages/{id}/hold` | Hold message |
+| `POST` | `/api/messages/{id}/release` | Release held message |
+| `GET` | `/api/users` | List users |
+| `POST` | `/api/users` | Create user |
+| `POST` | `/api/users/{call}/privilege` | Set privilege |
+| `POST` | `/api/users/{call}/password` | Reset password |
+| `DELETE` | `/api/users/{call}` | Delete user |
+| `GET` | `/api/neighbors` | List forward neighbors |
+| `GET` | `/api/stats` | Extended node statistics |
+| `GET` | `/api/wp` | White Pages lookup |
+| `GET/POST` | `/api/config` | Read / update node config |
 
 ---
 
@@ -136,13 +248,24 @@ nts_days           = 7
 killed_days        = 1
 ```
 
-### `[web]`
+### `[web]` — Sysop console
 
 ```toml
 [web]
 host        = "127.0.0.1"
 port        = 8080
 admin_token = "change-me-to-a-long-random-string"
+```
+
+Generate a token with `python -c "import secrets; print(secrets.token_hex(32))"`.
+
+### `[public_web]` — Public message board
+
+```toml
+[public_web]
+enabled = true
+host    = "127.0.0.1"
+port    = 8081
 ```
 
 ---
