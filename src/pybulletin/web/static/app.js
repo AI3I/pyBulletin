@@ -104,6 +104,15 @@ function connectWS() {
           loadMessages();
         }
       }
+      if (msg.type === "conference_joined") {
+        confOnJoined(msg.room, msg.welcome);
+      }
+      if (msg.type === "conference_message") {
+        confAppend(msg.text);
+      }
+      if (msg.type === "conference_left") {
+        confOnLeft();
+      }
     } catch (_) {}
   };
 }
@@ -375,6 +384,63 @@ function toast(msg, type = "info") {
   el.textContent = msg;
   area.appendChild(el);
   setTimeout(() => el.remove(), 4000);
+}
+
+// ---------------------------------------------------------------------------
+// Conference
+// ---------------------------------------------------------------------------
+let _confRoom = null;
+
+function confJoin() {
+  if (!WS || WS.readyState !== WebSocket.OPEN) {
+    toast("Not connected.", "error"); return;
+  }
+  const room = (document.getElementById("conf-room").value.trim().toUpperCase()) || "CONF";
+  WS.send(JSON.stringify({ type: "conference_join", room }));
+}
+
+function confLeave() {
+  if (WS && WS.readyState === WebSocket.OPEN) {
+    WS.send(JSON.stringify({ type: "conference_leave" }));
+  }
+}
+
+function confSend() {
+  const input = document.getElementById("conf-input");
+  const text  = input.value.trim();
+  if (!text || !WS || WS.readyState !== WebSocket.OPEN) return;
+  WS.send(JSON.stringify({ type: "conference_message", text }));
+  input.value = "";
+}
+
+function confOnJoined(room, welcome) {
+  _confRoom = room;
+  document.getElementById("conf-join-btn").style.display  = "none";
+  document.getElementById("conf-leave-btn").style.display = "";
+  document.getElementById("conf-room-label").textContent  = `Room: ${room}`;
+  document.getElementById("conf-chat-card").style.display = "flex";
+  const log = document.getElementById("conf-log");
+  log.textContent = "";
+  confAppend(welcome);
+  document.getElementById("conf-input").focus();
+}
+
+function confOnLeft() {
+  _confRoom = null;
+  document.getElementById("conf-join-btn").style.display  = "";
+  document.getElementById("conf-leave-btn").style.display = "none";
+  document.getElementById("conf-room-label").textContent  = "";
+  document.getElementById("conf-chat-card").style.display = "none";
+}
+
+function confAppend(text) {
+  const log  = document.getElementById("conf-log");
+  const isSystem = text.startsWith("***");
+  const line = document.createElement("div");
+  line.style.color = isSystem ? "var(--subtle)" : "";
+  line.textContent = text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
 }
 
 function toggleTheme() {

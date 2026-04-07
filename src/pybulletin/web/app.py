@@ -185,6 +185,28 @@ class WebApp:
         async with self._ws_lock:
             self._ws_clients.add(ws)
 
+        conf_room: str | None   = None
+        drain_task: asyncio.Task | None = None
+
+        async def _drain(queue: asyncio.Queue) -> None:
+            while True:
+                text = await queue.get()
+                text = text.rstrip("\r\n")
+                await ws.send_json({"type": "conference_message", "text": text})
+
+        async def _leave_conf() -> None:
+            nonlocal conf_room, drain_task
+            if conf_room and self._conf_hub:
+                await self._conf_hub.leave_room_ws(conf_room, sess.call)
+            if drain_task:
+                drain_task.cancel()
+                try:
+                    await drain_task
+                except asyncio.CancelledError:
+                    pass
+            conf_room  = None
+            drain_task = None
+
         try:
             await ws.send_json({
                 "type": "hello",
@@ -192,19 +214,35 @@ class WebApp:
                 "node": self._cfg.node.node_call,
                 "version": __version__,
             })
-            # Keep connection alive — just drain incoming messages
             while not ws.closed:
                 result = await ws.recv()
                 if result is None:
                     break
-                # Client can send {"type":"ping"} — echo pong
                 try:
                     data = json.loads(result[1].decode())
-                    if data.get("type") == "ping":
-                        await ws.send_json({"type": "pong"})
                 except Exception:
-                    pass
+                    continue
+                t = data.get("type")
+                if t == "ping":
+                    await ws.send_json({"type": "pong"})
+                elif t == "conference_join" and self._conf_hub:
+                    if conf_room:
+                        await _leave_conf()
+                    room = data.get("room") or self._conf_hub.DEFAULT_ROOM
+                    queue, welcome = await self._conf_hub.enter_room_ws(room, sess.call)
+                    conf_room  = room
+                    drain_task = asyncio.create_task(_drain(queue))
+                    await ws.send_json({"type": "conference_joined",
+                                        "room": room, "welcome": welcome})
+                elif t == "conference_message" and conf_room and self._conf_hub:
+                    text = str(data.get("text", "")).strip()
+                    if text:
+                        await self._conf_hub.send_from_ws(conf_room, sess.call, text)
+                elif t == "conference_leave":
+                    await _leave_conf()
+                    await ws.send_json({"type": "conference_left"})
         finally:
+            await _leave_conf()
             async with self._ws_lock:
                 self._ws_clients.discard(ws)
 

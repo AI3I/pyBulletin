@@ -96,6 +96,58 @@ class ConferenceRoom:
                 on_state_change()
             LOG.info("conference[%s]: %s left (%d remaining)", self.name, call, len(self._members))
 
+    async def join_ws(
+        self,
+        callsign: str,
+        on_state_change: Callable | None = None,
+    ) -> tuple[asyncio.Queue, str]:
+        """Add a WebSocket participant.  Returns (queue, welcome_text)."""
+        call  = callsign.upper()
+        queue: asyncio.Queue[str] = asyncio.Queue(maxsize=_QUEUE_DEPTH)
+
+        async with self._lock:
+            self._members[call]   = queue
+            self._joined_at[call] = time.monotonic()
+
+        if on_state_change:
+            on_state_change()
+
+        members_str = ", ".join(self.members)
+        welcome = (
+            f"*** Entering room {self.name}.  Members: {members_str}\n"
+            f"*** Type a message and press Enter.  Click Leave to exit."
+        )
+        await self._broadcast(f"*** {call} has joined {self.name}\r\n", exclude=call)
+        LOG.info("conference[%s]: %s joined via web (%d total)", self.name, call, len(self._members))
+        return queue, welcome
+
+    async def send_from_ws(self, callsign: str, text: str) -> None:
+        """Broadcast a message from a WebSocket participant."""
+        call = callsign.upper()
+        msg  = f"[{call}] {text}\r\n"
+        try:
+            async with self._lock:
+                if call in self._members:
+                    self._members[call].put_nowait(msg)  # echo to sender
+        except asyncio.QueueFull:
+            pass
+        await self._broadcast(msg, exclude=call)
+
+    async def leave_ws(
+        self,
+        callsign: str,
+        on_state_change: Callable | None = None,
+    ) -> None:
+        """Remove a WebSocket participant."""
+        call = callsign.upper()
+        async with self._lock:
+            self._members.pop(call, None)
+            self._joined_at.pop(call, None)
+        await self._broadcast(f"*** {call} has left {self.name}\r\n", exclude=None)
+        if on_state_change:
+            on_state_change()
+        LOG.info("conference[%s]: %s left via web (%d remaining)", self.name, call, len(self._members))
+
     async def _broadcast(self, text: str, exclude: str | None) -> None:
         async with self._lock:
             targets = {k: q for k, q in self._members.items() if k != exclude}
@@ -202,6 +254,36 @@ class ConferenceHubManager:
         async with self._lock:
             if name in self._rooms and self._rooms[name].member_count == 0:
                 del self._rooms[name]
+
+    async def enter_room_ws(
+        self, room_name: str, callsign: str,
+    ) -> tuple[asyncio.Queue, str]:
+        """Join room as a WebSocket participant. Returns (queue, welcome_text)."""
+        name = self._normalize_room(room_name)
+        async with self._lock:
+            if name not in self._rooms:
+                self._rooms[name] = ConferenceRoom(name)
+            room = self._rooms[name]
+        return await room.join_ws(callsign, on_state_change=self._on_state_change)
+
+    async def send_from_ws(self, room_name: str, callsign: str, text: str) -> None:
+        """Broadcast a message from a WebSocket participant."""
+        name = self._normalize_room(room_name)
+        async with self._lock:
+            room = self._rooms.get(name)
+        if room:
+            await room.send_from_ws(callsign, text)
+
+    async def leave_room_ws(self, room_name: str, callsign: str) -> None:
+        """Remove a WebSocket participant from the room."""
+        name = self._normalize_room(room_name)
+        async with self._lock:
+            room = self._rooms.get(name)
+        if room:
+            await room.leave_ws(callsign, on_state_change=self._on_state_change)
+            async with self._lock:
+                if name in self._rooms and self._rooms[name].member_count == 0:
+                    del self._rooms[name]
 
     def rooms_snapshot(self) -> dict[str, list[str]]:
         """Return {room_name: [sorted callsigns]} for the sysop monitor."""
