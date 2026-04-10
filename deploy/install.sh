@@ -11,6 +11,7 @@ log "installing pyBulletin into $PYBULLETIN_APP_DIR"
 ensure_group
 ensure_user
 ensure_dialout_membership
+ensure_audio_membership
 ensure_layout
 sync_tree
 ensure_selinux_contexts
@@ -21,6 +22,7 @@ install_or_refresh_service
 ensure_fail2ban_packages
 install_or_refresh_fail2ban
 install_or_refresh_logrotate
+install_or_refresh_udev_rules
 enable_service
 bootstrap_sysop_account
 show_sysop_bootstrap_note

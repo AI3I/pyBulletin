@@ -77,6 +77,9 @@ class RetentionConfig:
 
 @dataclass(slots=True)
 class KissConfig:
+    # Explicit AX.25 transport selection:
+    #   "disabled", "kiss_serial", "kiss_tcp", "afsk"
+    transport: str = "disabled"
     # Serial KISS TNC
     device: str = ""
     baud: int = 9600
@@ -92,6 +95,23 @@ class KissConfig:
     init_cmds: list[str] = field(default_factory=list)
     # Milliseconds to wait between init commands (and after the last one)
     init_delay_ms: int = 500
+
+
+@dataclass(slots=True)
+class AfskConfig:
+    enabled: bool = False
+    # ALSA / PortAudio-style input and output device selectors.
+    input_device: str = ""
+    output_device: str = ""
+    # Bell 202 defaults for 1200-baud VHF/UHF packet.
+    sample_rate: int = 48000
+    mark_hz: int = 1200
+    space_hz: int = 2200
+    baud: int = 1200
+    # Future GPIO / serial PTT selector.
+    ptt_device: str = ""
+    # If true, key TX on carrier/squelch transitions when implemented.
+    dcd_enabled: bool = True
 
 
 @dataclass(slots=True)
@@ -166,6 +186,7 @@ class AppConfig:
     store: StoreConfig = field(default_factory=StoreConfig)
     retention: RetentionConfig = field(default_factory=RetentionConfig)
     kiss: KissConfig = field(default_factory=KissConfig)
+    afsk: AfskConfig = field(default_factory=AfskConfig)
     beacon: BeaconConfig = field(default_factory=BeaconConfig)
     rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
     forward: ForwardConfig = field(default_factory=ForwardConfig)
@@ -260,6 +281,8 @@ def _build_retention(d: dict) -> RetentionConfig:
 
 def _build_kiss(d: dict) -> KissConfig:
     c = KissConfig()
+    if "transport" in d:
+        object.__setattr__(c, "transport", str(d["transport"]).lower())
     if "device" in d:
         object.__setattr__(c, "device", str(d["device"]))
     if "baud" in d:
@@ -274,6 +297,20 @@ def _build_kiss(d: dict) -> KissConfig:
         object.__setattr__(c, "init_cmds", [str(x) for x in d["init_cmds"]])
     if "init_delay_ms" in d:
         object.__setattr__(c, "init_delay_ms", int(d["init_delay_ms"]))
+    return c
+
+
+def _build_afsk(d: dict) -> AfskConfig:
+    c = AfskConfig()
+    for k in ("enabled", "dcd_enabled"):
+        if k in d:
+            object.__setattr__(c, k, bool(d[k]))
+    for k in ("input_device", "output_device", "ptt_device"):
+        if k in d:
+            object.__setattr__(c, k, str(d[k]))
+    for k in ("sample_rate", "mark_hz", "space_hz", "baud"):
+        if k in d:
+            object.__setattr__(c, k, int(d[k]))
     return c
 
 
@@ -353,6 +390,7 @@ def _build_config(data: dict) -> AppConfig:
         store=_build_store(data.get("store", {})),
         retention=_build_retention(data.get("retention", {})),
         kiss=_build_kiss(data.get("kiss", {})),
+        afsk=_build_afsk(data.get("afsk", {})),
         beacon=_build_beacon(data.get("beacon", {})),
         rate_limit=_build_rate_limit(data.get("rate_limit", {})),
         forward=_build_forward(data.get("forward", {})),

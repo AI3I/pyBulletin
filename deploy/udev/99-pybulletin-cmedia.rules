@@ -1,0 +1,3 @@
+# Allow the audio group to access C-Media HID GPIO endpoints used for PTT.
+# This matches common CM108/CM119 family USB interfaces.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0d8c", GROUP="audio", MODE="0660"

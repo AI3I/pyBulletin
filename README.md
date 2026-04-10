@@ -39,6 +39,12 @@ For hardware TNC support:
 python -m pip install -e ".[tnc]"
 ```
 
+For native Bell 202 soundcard receive support:
+
+```bash
+python -m pip install -e ".[audio]"
+```
+
 ---
 
 ## Deployment (Linux / systemd)
@@ -77,6 +83,7 @@ sudo bash deploy/uninstall.sh
 | `deploy/repair.sh` | Attempt to repair a corrupted SQLite database |
 | `deploy/fail2ban/` | fail2ban filter and jail for Telnet brute-force protection |
 | `deploy/logrotate/` | logrotate config for `/var/log/pybulletin/` |
+| `deploy/udev/` | udev rules for C-Media CM108/CM119 HID GPIO access |
 
 ### Helper scripts
 
@@ -210,6 +217,7 @@ Serial TNC:
 
 ```toml
 [kiss]
+transport = "kiss_serial"
 device = "/dev/ttyUSB0"
 baud   = 9600
 paclen = 236
@@ -219,9 +227,83 @@ TCP KISS (Dire Wolf, soundmodem):
 
 ```toml
 [kiss]
+transport = "kiss_tcp"
 tcp_host = "127.0.0.1"
 tcp_port = 8001
 ```
+
+### `[afsk]`
+
+Direct Bell 202 AFSK modem path for USB soundcard-style interfaces.
+
+```toml
+[afsk]
+input_device  = ""
+output_device = ""
+sample_rate   = 48000
+mark_hz       = 1200
+space_hz      = 2200
+baud          = 1200
+ptt_device    = ""   # e.g. "serial_rts:/dev/ttyUSB0"
+dcd_enabled   = true
+```
+
+Select it with `transport = "afsk"` in `[kiss]`.
+
+Current status:
+- RX and TX Bell 202 audio paths are implemented for mono 16-bit soundcard I/O via `sounddevice`
+- HDLC / AX.25 frame extraction and Bell 202 waveform generation are implemented in-tree
+- PTT currently supports no-op operation or serial RTS keying via `ptt_device = "serial_rts:/dev/ttyUSB0"`
+- PTT also supports BCM GPIO selectors like `gpio:23` and gpiochip selectors like `gpiochip:/dev/gpiochip0:24`
+- PTT also supports CM108/CM119 HID GPIO selectors like `cm108:/dev/hidraw0:3`
+- DCD and more robust carrier/symbol recovery are still under development
+
+Common interface patterns:
+- Kits4Hams SHARI and similar Pi-mounted nodes: soundcard I/O plus `gpio:<bcm_pin>` or `gpiochip:/dev/gpiochip0:<line>` if PTT is wired to GPIO
+- Masters Communications, DMK URI/RIM, and many CM108/119-based USB interfaces: soundcard I/O plus `cm108:/dev/hidrawN:<gpio_pin>`
+- modified generic CM108/CM119 USB fobs belong in that same CM108/119 `hidraw` bucket
+- Kits4Hams `DINAH` and `PAUL`: scope these with the CM108/CM119 USB-interface family, not the SHARI embedded-radio family
+- Kits4Hams `BRIAN`: scope this with integrated radio/interface boards like SHARI, not with the CM108/119 interface family
+- SignaLink-class USB interfaces: soundcard I/O plus VOX, no-op PTT, or `serial_rts:/dev/ttyUSB0` when a serial control port is available
+- AllStar ARI / URI / RIM style interfaces: soundcard I/O plus whichever PTT path the interface exposes, typically CM108 HID, GPIO, or serial RTS
+
+Full hardware matrix and setup notes:
+- [Hardware Guide](/home/jdlewis/GitHub/pyBulletin/docs/hardware.md)
+
+Examples:
+
+```toml
+[kiss]
+transport = "afsk"
+
+[afsk]
+input_device  = "hw:1,0"
+output_device = "hw:1,0"
+sample_rate   = 48000
+mark_hz       = 1200
+space_hz      = 2200
+baud          = 1200
+
+# C-Media CM108/119 GPIO 3 on /dev/hidraw0
+ptt_device    = "cm108:/dev/hidraw0:3"
+
+# Raspberry Pi BCM GPIO 23
+# ptt_device  = "gpio:23"
+
+# USB serial RTS
+# ptt_device  = "serial_rts:/dev/ttyUSB0"
+```
+
+Diagnostics:
+
+```bash
+pybulletin --config config/pybulletin.local.toml doctor-afsk
+```
+
+Deployment notes:
+- `deploy/install.sh` now adds the service user to the `audio` group for USB soundcard and `hidraw` access
+- `deploy/install.sh` installs a C-Media udev rule so CM108/CM119 `hidraw` devices are group-writable by `audio`
+- `deploy/doctor.sh` reports the selected AX.25 transport plus AFSK audio/PTT setup status
 
 ### `[forward]`
 
@@ -388,6 +470,10 @@ Tested with:
 - **Dire Wolf** (software TNC) via TCP KISS
 - **Kantronics KPC-3** and **KPC-9612** via serial KISS
 - **soundmodem** via TCP KISS
+
+Direct Bell 202 AFSK support is being added natively.  The current tree
+contains configuration plumbing and HDLC framing helpers, but not yet the
+finished soundcard modem/DSP implementation.
 
 ---
 

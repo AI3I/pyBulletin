@@ -52,6 +52,8 @@ nts_days           = 7
 killed_days        = 1
 
 [kiss]
+transport = "disabled"   # "disabled", "kiss_serial", "kiss_tcp", or "afsk"
+
 # Serial KISS TNC — leave device empty to disable
 device = ""
 baud   = 9600
@@ -60,6 +62,19 @@ paclen = 236      # maximum AX.25 packet payload bytes
 # KISS over TCP (Dire Wolf, soundmodem, etc.) — leave tcp_host empty to disable
 tcp_host = ""
 tcp_port = 8001
+
+[afsk]
+# Direct Bell 202 modem over USB soundcard / audio interface.
+# Current tree state: RX/TX Bell 202 audio paths exist; PTT supports no-op,
+# serial RTS, BCM GPIO, or gpiochip selectors when matching libraries exist.
+input_device  = ""
+output_device = ""
+sample_rate   = 48000
+mark_hz       = 1200
+space_hz      = 2200
+baud          = 1200
+ptt_device    = ""   # e.g. "cm108:/dev/hidraw0:3", "serial_rts:/dev/ttyUSB0", "gpio:23", or "gpiochip:/dev/gpiochip0:24"
+dcd_enabled   = true
 
 [beacon]
 enabled          = false

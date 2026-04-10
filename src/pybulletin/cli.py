@@ -34,6 +34,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("run-forward",   help="Run one forwarding cycle and exit")
     sub.add_parser("run-retention", help="Run message retention cleanup and exit")
     sub.add_parser("doctor",     help="Print deployment health summary")
+    sub.add_parser("doctor-afsk", help="Inspect native Bell 202 audio/PTT configuration and device support")
     return ap
 
 
@@ -43,6 +44,7 @@ async def _serve_core(config_path: str) -> None:
     from .transport.telnet import TelnetServer
     from .transport.kiss_tcp import KissTcpLink
     from .transport.kiss_serial import KissSerialLink
+    from .transport.afsk import AfskBell202Link
     from .transport.conference import ConferenceHubManager
     from .ax25.router import AX25Router
     from .ax25.beacon import BeaconTask
@@ -146,34 +148,48 @@ async def _serve_core(config_path: str) -> None:
                  cfg.forward.listen_host, cfg.forward.listen_port)
 
     # --- AX.25 / KISS transport ---
-    kiss_link = None
+    ax25_link = None
     beacon    = None
 
     async def _send_ax25(frame, port=0):
-        if kiss_link:
-            await kiss_link.send_frame(frame, port)
+        if ax25_link:
+            await ax25_link.send_frame(frame, port)
 
     router = AX25Router(cfg, store, strings, _send_ax25, conference_hub=conf_hub)
 
     kiss = cfg.kiss
-    if kiss.device:
-        kiss_link = KissSerialLink(
+    transport = kiss.transport
+    if transport == "afsk":
+        afsk = cfg.afsk
+        ax25_link = AfskBell202Link(afsk, router)
+        ax25_link.start()
+        LOG.info(
+            "serve-core: direct Bell 202 AFSK enabled "
+            "(input=%s output=%s sample_rate=%d)",
+            afsk.input_device or "<default>",
+            afsk.output_device or "<default>",
+            afsk.sample_rate,
+        )
+    elif transport == "kiss_serial":
+        ax25_link = KissSerialLink(
             kiss.device, kiss.baud, router,
             init_cmds=list(kiss.init_cmds),
             init_delay_ms=kiss.init_delay_ms,
         )
-        kiss_link.start()
+        ax25_link.start()
         LOG.info("serve-core: KISS serial on %s at %d baud", kiss.device, kiss.baud)
         if kiss.init_cmds:
             LOG.info("serve-core: TNC init sequence: %s", kiss.init_cmds)
-    elif kiss.tcp_host:
-        kiss_link = KissTcpLink(kiss.tcp_host, kiss.tcp_port, router)
-        kiss_link.start()
+    elif transport == "kiss_tcp":
+        ax25_link = KissTcpLink(kiss.tcp_host, kiss.tcp_port, router)
+        ax25_link.start()
         LOG.info("serve-core: KISS TCP → %s:%d", kiss.tcp_host, kiss.tcp_port)
+    elif transport == "disabled":
+        LOG.info("serve-core: AX.25 transport disabled — RF disabled")
     else:
-        LOG.info("serve-core: no KISS TNC configured — RF disabled")
+        LOG.warning("serve-core: unknown AX.25 transport %r — RF disabled", transport)
 
-    if kiss_link and cfg.beacon.enabled:
+    if ax25_link and cfg.beacon.enabled:
         beacon = BeaconTask(router, cfg)
         beacon.start()
         LOG.info("serve-core: beacon enabled — %s", cfg.beacon.text)
@@ -230,8 +246,8 @@ async def _serve_core(config_path: str) -> None:
         beacon.stop()
     if pactor_link:
         await pactor_link.stop()
-    if kiss_link:
-        await kiss_link.stop()
+    if ax25_link:
+        await ax25_link.stop()
     if fwd_server:
         fwd_server.close()
         await fwd_server.wait_closed()
@@ -299,6 +315,18 @@ async def _cmd_doctor(config_path: str) -> None:
         await store.close()
 
 
+async def _cmd_doctor_afsk(config_path: str) -> None:
+    cfg = load_config(config_path)
+    from .transport.afsk import afsk_diagnostics
+
+    print(f"pyBulletin {__version__}")
+    print(f"  node             : {cfg.node.node_call}")
+    print(f"  selected         : {cfg.kiss.transport}")
+    for line in afsk_diagnostics(cfg.afsk):
+        key, _, value = line.partition(":")
+        print(f"  {key:<16}: {value.strip()}")
+
+
 async def _cmd_run_forward(config_path: str) -> None:
     from .store.store import BBSStore
     from .forward.scheduler import ForwardScheduler
@@ -336,6 +364,7 @@ async def _serve(config_path: str) -> None:
     from .transport.telnet import TelnetServer
     from .transport.kiss_tcp import KissTcpLink
     from .transport.kiss_serial import KissSerialLink
+    from .transport.afsk import AfskBell202Link
     from .transport.conference import ConferenceHubManager
     from .ax25.router import AX25Router
     from .ax25.beacon import BeaconTask
@@ -460,33 +489,47 @@ async def _serve(config_path: str) -> None:
                  cfg.forward.listen_host, cfg.forward.listen_port)
 
     # --- AX.25 / KISS transport ---
-    kiss_link = None
+    ax25_link = None
     beacon    = None
     pactor_link = None
 
     async def _send_ax25(frame, port=0):
-        if kiss_link:
-            await kiss_link.send_frame(frame, port)
+        if ax25_link:
+            await ax25_link.send_frame(frame, port)
 
     router = AX25Router(cfg, store, strings, _send_ax25, conference_hub=conf_hub)
 
     kiss = cfg.kiss
-    if kiss.device:
-        kiss_link = KissSerialLink(
+    transport = kiss.transport
+    if transport == "afsk":
+        afsk = cfg.afsk
+        ax25_link = AfskBell202Link(afsk, router)
+        ax25_link.start()
+        LOG.info(
+            "serve: direct Bell 202 AFSK enabled "
+            "(input=%s output=%s sample_rate=%d)",
+            afsk.input_device or "<default>",
+            afsk.output_device or "<default>",
+            afsk.sample_rate,
+        )
+    elif transport == "kiss_serial":
+        ax25_link = KissSerialLink(
             kiss.device, kiss.baud, router,
             init_cmds=list(kiss.init_cmds),
             init_delay_ms=kiss.init_delay_ms,
         )
-        kiss_link.start()
+        ax25_link.start()
         LOG.info("serve: KISS serial on %s at %d baud", kiss.device, kiss.baud)
-    elif kiss.tcp_host:
-        kiss_link = KissTcpLink(kiss.tcp_host, kiss.tcp_port, router)
-        kiss_link.start()
+    elif transport == "kiss_tcp":
+        ax25_link = KissTcpLink(kiss.tcp_host, kiss.tcp_port, router)
+        ax25_link.start()
         LOG.info("serve: KISS TCP → %s:%d", kiss.tcp_host, kiss.tcp_port)
+    elif transport == "disabled":
+        LOG.info("serve: AX.25 transport disabled — RF disabled")
     else:
-        LOG.info("serve: no KISS TNC configured — RF disabled")
+        LOG.warning("serve: unknown AX.25 transport %r — RF disabled", transport)
 
-    if kiss_link and cfg.beacon.enabled:
+    if ax25_link and cfg.beacon.enabled:
         beacon = BeaconTask(router, cfg)
         beacon.start()
 
@@ -540,8 +583,8 @@ async def _serve(config_path: str) -> None:
         beacon.stop()
     if pactor_link:
         await pactor_link.stop()
-    if kiss_link:
-        await kiss_link.stop()
+    if ax25_link:
+        await ax25_link.stop()
     if fwd_server:
         fwd_server.close()
         await fwd_server.wait_closed()
@@ -570,6 +613,8 @@ def main() -> None:
         asyncio.run(_serve_web(args.config))
     elif args.command == "doctor":
         asyncio.run(_cmd_doctor(args.config))
+    elif args.command == "doctor-afsk":
+        asyncio.run(_cmd_doctor_afsk(args.config))
     elif args.command == "run-forward":
         asyncio.run(_cmd_run_forward(args.config))
     elif args.command == "run-retention":

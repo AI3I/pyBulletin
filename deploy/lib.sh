@@ -19,6 +19,7 @@ PYBULLETIN_PKG_AUTO_INSTALL="${PYBULLETIN_PKG_AUTO_INSTALL:-1}"
 PYBULLETIN_PYTHON_LINK="${PYBULLETIN_PYTHON_LINK:-/usr/local/bin/pybulletin-python}"
 PYBULLETIN_FAIL2BAN_DIR="${PYBULLETIN_FAIL2BAN_DIR:-/etc/fail2ban}"
 PYBULLETIN_LOGROTATE_DIR="${PYBULLETIN_LOGROTATE_DIR:-/etc/logrotate.d}"
+PYBULLETIN_UDEV_RULES_DIR="${PYBULLETIN_UDEV_RULES_DIR:-/etc/udev/rules.d}"
 PYBULLETIN_FAIL2BAN_BADIP_LIST="${PYBULLETIN_FAIL2BAN_BADIP_LIST:-$PYBULLETIN_APP_DIR/config/fail2ban-badip.local}"
 PYBULLETIN_FAIL2BAN_BADIP_STATE="${PYBULLETIN_FAIL2BAN_BADIP_STATE:-$PYBULLETIN_APP_DIR/data/fail2ban-badip-applied.txt}"
 PYBULLETIN_SYSOP_BOOTSTRAP_NOTE="${PYBULLETIN_SYSOP_BOOTSTRAP_NOTE:-/root/pybulletin-initial-sysop.txt}"
@@ -203,6 +204,13 @@ ensure_dialout_membership() {
   fi
 }
 
+ensure_audio_membership() {
+  if getent group audio >/dev/null 2>&1; then
+    usermod -aG audio "$PYBULLETIN_USER" || true
+    log "added $PYBULLETIN_USER to group audio for USB soundcard and hidraw access"
+  fi
+}
+
 ensure_layout() {
   install -d -o "$PYBULLETIN_USER" -g "$PYBULLETIN_GROUP"       "$PYBULLETIN_APP_DIR"
   install -d -o "$PYBULLETIN_USER" -g "$PYBULLETIN_GROUP"       "$PYBULLETIN_APP_DIR/data"
@@ -373,6 +381,19 @@ install_or_refresh_logrotate() {
   install -o root -g root -m 0644 \
     "$root/deploy/logrotate/pybulletin" \
     "$PYBULLETIN_LOGROTATE_DIR/pybulletin"
+}
+
+install_or_refresh_udev_rules() {
+  local root
+  root="$(repo_root)"
+  install -d -m 0755 "$PYBULLETIN_UDEV_RULES_DIR"
+  install -o root -g root -m 0644 \
+    "$root/deploy/udev/99-pybulletin-cmedia.rules" \
+    "$PYBULLETIN_UDEV_RULES_DIR/99-pybulletin-cmedia.rules"
+  if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules >/dev/null 2>&1 || true
+    udevadm trigger --subsystem-match=hidraw >/dev/null 2>&1 || true
+  fi
 }
 
 enable_fail2ban_service() {
