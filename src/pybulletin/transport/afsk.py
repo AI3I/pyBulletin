@@ -164,6 +164,14 @@ class _PTTControl:
     async def set_keyed(self, keyed: bool) -> None:
         return None
 
+    def set_keyed_blocking(self, keyed: bool) -> None:
+        """Synchronous PTT release path usable from cancellation handlers.
+
+        Blocks the event loop briefly but is guaranteed to run to completion.
+        Ham transmitters must never be left stuck keyed (Part 97).
+        """
+        return None
+
     async def close(self) -> None:
         return None
 
@@ -192,6 +200,9 @@ class _SerialRTSPTT(_PTTControl):
     async def set_keyed(self, keyed: bool) -> None:
         await asyncio.to_thread(self._set_keyed_sync, keyed)
 
+    def set_keyed_blocking(self, keyed: bool) -> None:
+        self._set_keyed_sync(keyed)
+
     def _set_keyed_sync(self, keyed: bool) -> None:
         self._ensure_open()
         assert self._serial is not None
@@ -201,7 +212,15 @@ class _SerialRTSPTT(_PTTControl):
         if self._serial is not None:
             serial_port = self._serial
             self._serial = None
-            await asyncio.to_thread(serial_port.close)
+            await asyncio.to_thread(self._close_sync, serial_port)
+
+    @staticmethod
+    def _close_sync(serial_port) -> None:
+        try:
+            serial_port.rts = False
+        except Exception:
+            pass
+        serial_port.close()
 
 
 class _RPiGpioPTT(_PTTControl):
@@ -228,6 +247,9 @@ class _RPiGpioPTT(_PTTControl):
     async def set_keyed(self, keyed: bool) -> None:
         await asyncio.to_thread(self._set_keyed_sync, keyed)
 
+    def set_keyed_blocking(self, keyed: bool) -> None:
+        self._set_keyed_sync(keyed)
+
     def _set_keyed_sync(self, keyed: bool) -> None:
         self._ensure_open()
         assert self._gpio is not None
@@ -236,6 +258,8 @@ class _RPiGpioPTT(_PTTControl):
 
     async def close(self) -> None:
         if self._gpio is not None:
+            with suppress(Exception):
+                await self.set_keyed(False)
             gpio = self._gpio
             self._gpio = None
             await asyncio.to_thread(gpio.cleanup, self._pin)
@@ -283,6 +307,9 @@ class _GpiodPTT(_PTTControl):
     async def set_keyed(self, keyed: bool) -> None:
         await asyncio.to_thread(self._set_keyed_sync, keyed)
 
+    def set_keyed_blocking(self, keyed: bool) -> None:
+        self._set_keyed_sync(keyed)
+
     def _set_keyed_sync(self, keyed: bool) -> None:
         self._ensure_open()
         value = 1 if (keyed == self._active_high) else 0
@@ -295,6 +322,9 @@ class _GpiodPTT(_PTTControl):
         self._line_handle.set_value(value)
 
     async def close(self) -> None:
+        if self._request is not None or self._line_handle is not None:
+            with suppress(Exception):
+                await self.set_keyed(False)
         if self._request is not None:
             request = self._request
             self._request = None
@@ -320,6 +350,9 @@ class _CM108PTT(_PTTControl):
     async def set_keyed(self, keyed: bool) -> None:
         await asyncio.to_thread(self._set_keyed_sync, keyed)
 
+    def set_keyed_blocking(self, keyed: bool) -> None:
+        self._set_keyed_sync(keyed)
+
     def _set_keyed_sync(self, keyed: bool) -> None:
         if self._pin < 1 or self._pin > 8:
             raise RuntimeError(f"CM108 GPIO pin must be 1..8, got {self._pin}")
@@ -337,6 +370,10 @@ class _CM108PTT(_PTTControl):
         finally:
             os.close(fd)
 
+    async def close(self) -> None:
+        with suppress(Exception):
+            await self.set_keyed(False)
+
 
 class AfskBell202Link:
     """Bell 202 AFSK transport for direct soundcard operation."""
@@ -349,6 +386,10 @@ class AfskBell202Link:
 
     def start(self) -> None:
         if self._task is None or self._task.done():
+            # Validate the PTT selector before we launch the audio task so a
+            # typo in config surfaces as a startup error, not silent no-op PTT.
+            if self._cfg.ptt_device:
+                _parse_ptt_selector(self._cfg.ptt_device)
             self._task = asyncio.create_task(self._run(), name="afsk-bell202")
 
     async def stop(self) -> None:
@@ -480,16 +521,25 @@ class AfskBell202Link:
         while True:
             payload = await self._tx_queue.get()
             pcm = mod.modulate_ax25_frame(payload)
+            keyed = False
             try:
                 await ptt.set_keyed(True)
+                keyed = True
                 await asyncio.sleep(0.03)
                 await asyncio.to_thread(output_stream.write, pcm)
                 await asyncio.sleep(0.02)
+            except asyncio.CancelledError:
+                if keyed:
+                    with suppress(Exception):
+                        ptt.set_keyed_blocking(False)
+                        keyed = False
+                raise
             except Exception as exc:
                 LOG.warning("afsk: TX error: %s", exc)
             finally:
-                with suppress(Exception):
-                    await ptt.set_keyed(False)
+                if keyed:
+                    with suppress(Exception):
+                        ptt.set_keyed_blocking(False)
 
 
 def _pcm16le_to_float(data: bytes) -> list[float]:
@@ -533,7 +583,10 @@ def _build_ptt(selector: str) -> _PTTControl:
         return _NullPTT()
     kind, params = _parse_ptt_selector(selector)
     if kind == "serial_rts":
-        return _SerialRTSPTT(str(params["device"]))
+        device = str(params["device"])
+        if not device:
+            raise ValueError(f"serial_rts PTT requires a device path, got {selector!r}")
+        return _SerialRTSPTT(device)
     if kind == "gpio":
         return _RPiGpioPTT(int(params["pin"]), active_high=bool(params["active_high"]))
     if kind == "gpiochip":
@@ -548,12 +601,20 @@ def _build_ptt(selector: str) -> _PTTControl:
             int(params["pin"]),
             active_high=bool(params["active_high"]),
         )
-    LOG.warning("afsk: unsupported PTT selector %r; using no-op PTT", selector)
-    return _NullPTT()
+    raise ValueError(f"unsupported PTT selector kind {kind!r} from {selector!r}")
+
+
+_PTT_SELECTOR_HELP = (
+    "expected one of: serial_rts:<device>, gpio:<pin>, "
+    "gpiochip:<chip>:<line>, cm108:<hidraw>:<pin> "
+    "(optionally followed by ,active_low or ,active_high)"
+)
 
 
 def _parse_ptt_selector(selector: str) -> tuple[str, dict[str, object]]:
     value = selector.strip()
+    if not value:
+        raise ValueError(f"empty PTT selector; {_PTT_SELECTOR_HELP}")
     active_high = True
     if value.endswith(",active_low"):
         active_high = False
@@ -562,7 +623,10 @@ def _parse_ptt_selector(selector: str) -> tuple[str, dict[str, object]]:
         value = value[:-12]
 
     if value.startswith("serial_rts:"):
-        return "serial_rts", {"device": value.split(":", 1)[1], "active_high": active_high}
+        device = value.split(":", 1)[1]
+        if not device:
+            raise ValueError(f"serial_rts PTT requires a device path, got {selector!r}")
+        return "serial_rts", {"device": device, "active_high": active_high}
     if value.startswith("gpio:"):
         return "gpio", {"pin": int(value.split(":", 1)[1]), "active_high": active_high}
     if value.startswith("gpiochip:"):
@@ -575,7 +639,7 @@ def _parse_ptt_selector(selector: str) -> tuple[str, dict[str, object]]:
     if value.startswith("cm108:"):
         device, pin = value.split(":", 1)[1].rsplit(":", 1)
         return "cm108", {"device": device, "pin": int(pin), "active_high": active_high}
-    return "unknown", {"selector": selector}
+    raise ValueError(f"unrecognised PTT selector {selector!r}; {_PTT_SELECTOR_HELP}")
 
 
 def afsk_diagnostics(cfg: AfskConfig) -> list[str]:
@@ -615,7 +679,11 @@ def afsk_diagnostics(cfg: AfskConfig) -> list[str]:
     if not cfg.ptt_device:
         lines.append("ptt_backend      : none")
     else:
-        kind, params = _parse_ptt_selector(cfg.ptt_device)
+        try:
+            kind, params = _parse_ptt_selector(cfg.ptt_device)
+        except ValueError as exc:
+            lines.append(f"ptt_selector     : invalid ({exc})")
+            kind, params = "unknown", {}
         lines.append(f"ptt_selector     : {kind}")
         if kind == "serial_rts":
             lines.append(f"ptt_target       : {params['device']}")

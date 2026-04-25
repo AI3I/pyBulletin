@@ -18,6 +18,12 @@ _CRC_INIT = 0xFFFF
 _CRC_XOROUT = 0xFFFF
 _CRC_POLY_REVERSED = 0x8408
 
+# Upper bound on bits we retain when no complete frame has been seen yet.
+# Longest AX.25 frame is ~330 bytes (addresses + control + PID + paclen + FCS)
+# with up to 20% bit-stuffing overhead, so ~3200 bits. 8192 leaves ample margin
+# while keeping memory bounded on noise-only channels.
+_MAX_REMAINDER_BITS = 8192
+
 
 def crc_x25(data: bytes) -> int:
     """Return AX.25/HDLC CRC-16 (X.25/CCITT, reflected) for *data*."""
@@ -181,8 +187,20 @@ def extract_hdlc_frames(bits: list[int]) -> tuple[list[bytes], list[int]]:
             continue
         i += 1
 
-    if len(flag_positions) < 2:
+    if not flag_positions:
+        # Pure noise with no flag ever seen. Keep only a tail short enough to
+        # detect a flag that straddles the next buffer.
+        if len(bits) > _MAX_REMAINDER_BITS:
+            return frames, bits[-(len(FLAG_BITS) - 1):]
         return frames, bits
+
+    if len(flag_positions) < 2:
+        remainder = bits[flag_positions[0]:]
+        if len(remainder) > _MAX_REMAINDER_BITS:
+            # A single flag followed by far more bits than any valid frame
+            # means we lost sync. Drop the stale flag and start fresh.
+            return frames, bits[-(len(FLAG_BITS) - 1):]
+        return frames, remainder
 
     for start, end in zip(flag_positions, flag_positions[1:]):
         stuffed = bits[start + 8:end]
