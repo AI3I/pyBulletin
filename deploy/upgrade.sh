@@ -16,6 +16,7 @@ log "upgrading pyBulletin in $PYBULLETIN_APP_DIR"
 ensure_group
 ensure_user
 ensure_dialout_membership
+ensure_audio_membership
 ensure_layout
 sync_tree
 ensure_selinux_contexts

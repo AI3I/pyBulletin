@@ -7,7 +7,6 @@ PYBULLETIN_GROUP="${PYBULLETIN_GROUP:-$PYBULLETIN_USER}"
 PYBULLETIN_HOME="${PYBULLETIN_HOME:-/home/$PYBULLETIN_USER}"
 PYBULLETIN_APP_DIR="${PYBULLETIN_APP_DIR:-$PYBULLETIN_HOME/pyBulletin}"
 PYBULLETIN_SERVICE_NAME="${PYBULLETIN_SERVICE_NAME:-pybulletin.service}"
-PYBULLETIN_WEB_SERVICE_NAME="${PYBULLETIN_WEB_SERVICE_NAME:-pybulletin-web.service}"
 PYBULLETIN_FORWARD_SERVICE_NAME="${PYBULLETIN_FORWARD_SERVICE_NAME:-pybulletin-forward.service}"
 PYBULLETIN_FORWARD_TIMER_NAME="${PYBULLETIN_FORWARD_TIMER_NAME:-pybulletin-forward.timer}"
 PYBULLETIN_RETENTION_SERVICE_NAME="${PYBULLETIN_RETENTION_SERVICE_NAME:-pybulletin-retention.service}"
@@ -291,13 +290,14 @@ install_or_refresh_service() {
       "$root/deploy/systemd/$unit" \
       "$PYBULLETIN_SYSTEMD_DIR/$unit"
   done
-  # Disable legacy separate web service if present
+  # Remove legacy split web service; pybulletin.service now serves core + web.
   systemctl disable --now pybulletin-web.service >/dev/null 2>&1 || true
+  rm -f "$PYBULLETIN_SYSTEMD_DIR/pybulletin-web.service"
   systemctl daemon-reload
+  systemctl reset-failed pybulletin-web.service >/dev/null 2>&1 || true
 }
 
 service_is_active()     { systemctl is-active --quiet "$PYBULLETIN_SERVICE_NAME"; }
-web_service_is_active() { systemctl is-active --quiet "$PYBULLETIN_WEB_SERVICE_NAME"; }
 
 wait_for_systemd_active() {
   local unit="$1" timeout="${2:-30}" start now state
@@ -317,11 +317,6 @@ wait_for_systemd_active() {
 restart_service_hard() {
   service_is_active && { systemctl kill -s SIGKILL "$PYBULLETIN_SERVICE_NAME" || true; sleep 1; }
   systemctl start "$PYBULLETIN_SERVICE_NAME"
-}
-
-restart_web_service_hard() {
-  web_service_is_active && { systemctl kill -s SIGKILL "$PYBULLETIN_WEB_SERVICE_NAME" || true; sleep 1; }
-  systemctl start "$PYBULLETIN_WEB_SERVICE_NAME"
 }
 
 enable_service() {

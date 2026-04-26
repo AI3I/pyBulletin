@@ -64,13 +64,12 @@ sudo bash deploy/uninstall.sh
 
 `install.sh` will:
 - Create a dedicated `pybulletin` system user and group
-- Install the package into `/opt/pybulletin`
+- Install the application tree into `/home/pybulletin/pyBulletin`
 - Install and enable systemd units:
   - `pybulletin.service` — main BBS (Telnet + web)
-  - `pybulletin-web.service` — public web interface (if enabled)
   - `pybulletin-forward.service` / `.timer` — scheduled forwarding
   - `pybulletin-retention.service` / `.timer` — nightly message cleanup
-- Drop a starter config at `/etc/pybulletin/pybulletin.toml`
+- Drop a starter config at `/home/pybulletin/pyBulletin/config/pybulletin.toml`
 
 ### Additional deploy scripts
 

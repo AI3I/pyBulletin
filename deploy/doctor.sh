@@ -20,7 +20,7 @@ audio_ok="no"
 id -nG "$PYBULLETIN_USER" 2>/dev/null | grep -qE '\baudio\b' && audio_ok="yes"
 
 # --- Services ---
-for svc_var in SERVICE_NAME WEB_SERVICE_NAME FORWARD_TIMER_NAME RETENTION_TIMER_NAME; do
+for svc_var in SERVICE_NAME FORWARD_TIMER_NAME RETENTION_TIMER_NAME; do
   eval "unit=\$PYBULLETIN_${svc_var}"
   eval "state_var=svc_${svc_var,,}"
   s="missing"
@@ -164,8 +164,7 @@ status "app dir"           "$PYBULLETIN_APP_DIR"
 status "config"            "$PYBULLETIN_CONFIG_DEST ($config_ok)"
 status "database"          "${db_path:-unset} ($db_ok)"
 status "files dir"         "${files_path:-unset} ($files_ok)"
-status "core service"      "$PYBULLETIN_SERVICE_NAME ($svc_service_name)"
-status "web service"       "$PYBULLETIN_WEB_SERVICE_NAME ($svc_web_service_name)"
+status "service"           "$PYBULLETIN_SERVICE_NAME ($svc_service_name)"
 status "forward timer"     "$PYBULLETIN_FORWARD_TIMER_NAME ($svc_forward_timer_name)"
 status "retention timer"   "$PYBULLETIN_RETENTION_TIMER_NAME ($svc_retention_timer_name)"
 status "fail2ban"          "fail2ban.service ($fail2ban_state)"
