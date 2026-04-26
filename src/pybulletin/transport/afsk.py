@@ -1,14 +1,14 @@
 """Direct Bell 202 AFSK transport over soundcard audio.
 
-This is the future home of the in-process modem path for USB soundcards and
-radio interfaces such as SHARI-class devices.  It sits below AX.25 and above
-the eventual audio/PTT/DCD implementation.
+This is the in-process modem path for USB soundcards and radio interfaces such
+as SHARI-class devices.  It sits below AX.25 and uses userspace audio/PTT
+instead of Linux kernel AX.25 sockets.
 
 Current status:
-  - configuration plumbing is present
-  - the transport surface is wired into the CLI
-  - HDLC helpers exist in ``pybulletin.ax25.hdlc``
-  - actual audio DSP and PTT control are not implemented yet
+  - RX/TX Bell 202 audio is implemented in pure Python
+  - live audio can use either sounddevice or PyAudio
+  - PTT supports no-op, serial RTS, BCM GPIO, gpiochip, and CM108/CM119 HID
+  - DCD/COS and noisy-channel clock recovery still need field hardening
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import math
 import os
 from array import array
 from collections.abc import Iterable
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -408,10 +408,15 @@ class AfskBell202Link:
         try:
             import sounddevice  # type: ignore[import]
         except ImportError:
-            LOG.error(
-                "afsk: sounddevice not installed. RX modem path is available "
-                "in-code, but live soundcard capture requires: pip install sounddevice"
-            )
+            try:
+                import pyaudio  # type: ignore[import]
+            except ImportError:
+                LOG.error(
+                    "afsk: no supported audio backend installed. "
+                    "Install sounddevice or PyAudio."
+                )
+                return
+            await self._run_pyaudio(pyaudio)
             return
 
         loop = asyncio.get_running_loop()
@@ -508,6 +513,92 @@ class AfskBell202Link:
             except Exception:
                 pass
 
+    async def _run_pyaudio(self, pyaudio_mod) -> None:
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=32)
+        demod = Bell202Demodulator(
+            sample_rate=self._cfg.sample_rate,
+            baud=self._cfg.baud,
+            mark_hz=self._cfg.mark_hz,
+            space_hz=self._cfg.space_hz,
+        )
+        mod = Bell202Modulator(
+            sample_rate=self._cfg.sample_rate,
+            baud=self._cfg.baud,
+            mark_hz=self._cfg.mark_hz,
+            space_hz=self._cfg.space_hz,
+        )
+        ptt = _build_ptt(self._cfg.ptt_device)
+        blocksize = max(120, int(self._cfg.sample_rate / self._cfg.baud) * 12)
+        audio = pyaudio_mod.PyAudio()
+        input_index = _pyaudio_device_index(audio, self._cfg.input_device, input=True)
+        output_index = _pyaudio_device_index(audio, self._cfg.output_device, input=False)
+        input_stream = None
+        output_stream = None
+        tx_task: asyncio.Task | None = None
+        try:
+            input_stream = audio.open(
+                format=pyaudio_mod.paInt16,
+                channels=1,
+                rate=self._cfg.sample_rate,
+                input=True,
+                frames_per_buffer=blocksize,
+                input_device_index=input_index,
+            )
+            output_stream = audio.open(
+                format=pyaudio_mod.paInt16,
+                channels=1,
+                rate=self._cfg.sample_rate,
+                output=True,
+                frames_per_buffer=blocksize,
+                output_device_index=output_index,
+            )
+            LOG.info(
+                "afsk: Bell 202 modem active via PyAudio input=%r output=%r sample_rate=%d baud=%d mark=%d space=%d ptt=%r",
+                self._cfg.input_device or "<default>",
+                self._cfg.output_device or "<default>",
+                self._cfg.sample_rate,
+                self._cfg.baud,
+                self._cfg.mark_hz,
+                self._cfg.space_hz,
+                self._cfg.ptt_device or "<none>",
+            )
+            tx_task = asyncio.create_task(
+                self._tx_loop_pyaudio(mod, output_stream, ptt),
+                name="afsk-bell202-tx",
+            )
+            while True:
+                block = await asyncio.to_thread(
+                    input_stream.read,
+                    blocksize,
+                    exception_on_overflow=False,
+                )
+                try:
+                    queue.put_nowait(block)
+                except asyncio.QueueFull:
+                    LOG.warning("afsk: audio queue overflow; dropping input block")
+                    continue
+                while not queue.empty():
+                    for payload in demod.feed_samples(_pcm16le_to_float(queue.get_nowait())):
+                        await self._deliver_frame(payload)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if tx_task is not None:
+                tx_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await tx_task
+            await ptt.close()
+            for stream in (input_stream, output_stream):
+                if stream is None:
+                    continue
+                with suppress(Exception):
+                    stream.stop_stream()
+                with suppress(Exception):
+                    stream.close()
+            with suppress(Exception):
+                audio.terminate()
+
     async def _deliver_frame(self, payload: bytes, port: int = 0) -> None:
         from ..ax25.frame import AX25Frame
         try:
@@ -518,6 +609,30 @@ class AfskBell202Link:
             LOG.debug("afsk: frame decode error: %s", exc)
 
     async def _tx_loop(self, mod: Bell202Modulator, output_stream, ptt: _PTTControl) -> None:
+        while True:
+            payload = await self._tx_queue.get()
+            pcm = mod.modulate_ax25_frame(payload)
+            keyed = False
+            try:
+                await ptt.set_keyed(True)
+                keyed = True
+                await asyncio.sleep(0.03)
+                await asyncio.to_thread(output_stream.write, pcm)
+                await asyncio.sleep(0.02)
+            except asyncio.CancelledError:
+                if keyed:
+                    with suppress(Exception):
+                        ptt.set_keyed_blocking(False)
+                        keyed = False
+                raise
+            except Exception as exc:
+                LOG.warning("afsk: TX error: %s", exc)
+            finally:
+                if keyed:
+                    with suppress(Exception):
+                        ptt.set_keyed_blocking(False)
+
+    async def _tx_loop_pyaudio(self, mod: Bell202Modulator, output_stream, ptt: _PTTControl) -> None:
         while True:
             payload = await self._tx_queue.get()
             pcm = mod.modulate_ax25_frame(payload)
@@ -676,6 +791,34 @@ def afsk_diagnostics(cfg: AfskConfig) -> list[str]:
         except Exception as exc:
             lines.append(f"audio_devices    : error: {exc}")
 
+    try:
+        import pyaudio  # type: ignore[import]
+    except ImportError:
+        lines.append("pyaudio          : missing")
+    else:
+        lines.append("pyaudio          : available")
+        pa = None
+        try:
+            with _silence_stderr_fd():
+                pa = pyaudio.PyAudio()
+                count = pa.get_device_count()
+                lines.append(f"pyaudio_devices  : {count} found")
+                for idx in range(min(count, 8)):
+                    dev = pa.get_device_info_by_index(idx)
+                    lines.append(
+                        "pyaudio_list     : "
+                        f"{idx}: {dev.get('name', '<unknown>')} "
+                        f"(in={dev.get('maxInputChannels', 0)} out={dev.get('maxOutputChannels', 0)})"
+                    )
+            if count > 8:
+                lines.append("pyaudio_list     : ...")
+        except Exception as exc:
+            lines.append(f"pyaudio_devices  : error: {exc}")
+        finally:
+            if pa is not None:
+                with suppress(Exception):
+                    pa.terminate()
+
     if not cfg.ptt_device:
         lines.append("ptt_backend      : none")
     else:
@@ -750,3 +893,36 @@ def _find_cm108_hidraw_devices() -> list[str]:
             continue
         matches.append(f"/dev/{dev.name}")
     return matches
+
+
+def _pyaudio_device_index(audio, selector: str, *, input: bool) -> int | None:
+    if not selector:
+        return None
+    try:
+        return int(selector)
+    except ValueError:
+        pass
+    needle = selector.casefold()
+    channel_key = "maxInputChannels" if input else "maxOutputChannels"
+    for idx in range(audio.get_device_count()):
+        info = audio.get_device_info_by_index(idx)
+        if int(info.get(channel_key, 0)) <= 0:
+            continue
+        if needle in str(info.get("name", "")).casefold():
+            return idx
+    direction = "input" if input else "output"
+    raise RuntimeError(f"PyAudio {direction} device not found: {selector!r}")
+
+
+@contextmanager
+def _silence_stderr_fd():
+    """Temporarily silence native libraries that write directly to fd 2."""
+    saved = os.dup(2)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, 2)
+        yield
+    finally:
+        os.dup2(saved, 2)
+        os.close(saved)
+        os.close(devnull)

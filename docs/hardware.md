@@ -161,8 +161,11 @@ For now, treat them as:
 ### Native AFSK
 
 1. Set `[kiss].transport = "afsk"`.
-2. Install the audio dependency:
+2. Install the audio dependency. Source installs can use:
    `python -m pip install -e ".[audio]"`
+   Deployed Linux systems install distro audio packages through
+   `deploy/install.sh`, `deploy/upgrade.sh`, and `deploy/repair.sh` where
+   those packages are available.
 3. Choose the input/output audio device.
 4. Choose the correct `ptt_device` selector or leave it empty for VOX.
 5. Run:
@@ -185,3 +188,9 @@ control paths, but the following still need field hardening:
 - stronger symbol timing and carrier recovery under noisy conditions
 - per-device tuning guidance for real-world radio audio chains
 - more hardware validation across specific boards and interface revisions
+
+## Kernel AX.25 Note
+
+pyBulletin does not need Linux kernel `AF_AX25`, `mkiss`, or `kissattach` for
+its supported RF paths. Use `kiss_tcp` with Dire Wolf/soundmodem, `kiss_serial`
+with an external KISS TNC, or `afsk` for the native userspace modem path.

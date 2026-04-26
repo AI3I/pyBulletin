@@ -210,6 +210,38 @@ ensure_audio_membership() {
   fi
 }
 
+install_optional_packages() {
+  [ "$PYBULLETIN_PKG_AUTO_INSTALL" = "1" ] || return 0
+  [ "$#" -gt 0 ] || return 0
+  local pkg
+  for pkg in "$@"; do
+    install_packages "$pkg" || log "optional package not installed: $pkg"
+  done
+}
+
+ensure_rf_runtime_packages() {
+  local mgr
+  mgr="$(pkg_manager)" || return 0
+  case "$mgr" in
+    apt)
+      install_optional_packages \
+        libportaudio2 \
+        python3-pyaudio \
+        python3-serial \
+        python3-libgpiod \
+        alsa-utils
+      ;;
+    dnf|yum)
+      install_optional_packages \
+        portaudio \
+        python3-pyaudio \
+        python3-pyserial \
+        python3-libgpiod \
+        alsa-utils
+      ;;
+  esac
+}
+
 ensure_layout() {
   install -d -o "$PYBULLETIN_USER" -g "$PYBULLETIN_GROUP"       "$PYBULLETIN_APP_DIR"
   install -d -o "$PYBULLETIN_USER" -g "$PYBULLETIN_GROUP"       "$PYBULLETIN_APP_DIR/data"

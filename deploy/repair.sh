@@ -12,6 +12,7 @@ ensure_group
 ensure_user
 ensure_dialout_membership
 ensure_audio_membership
+ensure_rf_runtime_packages
 ensure_layout
 sync_tree
 ensure_selinux_contexts

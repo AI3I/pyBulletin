@@ -83,6 +83,7 @@ fi
 
 # --- AFSK / soundcard / PTT ---
 sounddevice_ok="unknown"
+pyaudio_ok="unknown"
 audio_input_ok="not configured"
 audio_output_ok="not configured"
 ptt_ok="not configured"
@@ -97,6 +98,15 @@ if [ -f "$PYBULLETIN_CONFIG_DEST" ]; then
   sounddevice_ok="$("${PYBULLETIN_PYTHON_LINK:-/usr/bin/python3}" - <<PY
 try:
     import sounddevice  # type: ignore
+except Exception:
+    print("missing")
+else:
+    print("available")
+PY
+)"
+  pyaudio_ok="$("${PYBULLETIN_PYTHON_LINK:-/usr/bin/python3}" - <<PY
+try:
+    import pyaudio  # type: ignore
 except Exception:
     print("missing")
 else:
@@ -142,9 +152,13 @@ for dev in /sys/class/hidraw/hidraw*/device/uevent; do
   fi
 done
 
-# --- AX.25 kernel module ---
-ax25_mod="not loaded"
-lsmod 2>/dev/null | grep -q '^ax25 ' && ax25_mod="loaded"
+# --- Kernel AX.25 is optional; pyBulletin uses userspace KISS/AFSK paths. ---
+kernel_ax25="unavailable (not required)"
+if lsmod 2>/dev/null | grep -q '^ax25 '; then
+  kernel_ax25="loaded (not required)"
+elif command -v modinfo >/dev/null 2>&1 && modinfo ax25 >/dev/null 2>&1; then
+  kernel_ax25="available, not loaded (not required)"
+fi
 
 # --- API health ---
 api_health="unavailable"
@@ -169,10 +183,11 @@ status "forward timer"     "$PYBULLETIN_FORWARD_TIMER_NAME ($svc_forward_timer_n
 status "retention timer"   "$PYBULLETIN_RETENTION_TIMER_NAME ($svc_retention_timer_name)"
 status "fail2ban"          "fail2ban.service ($fail2ban_state)"
 status "selinux"           "$selinux_state"
-status "ax25 module"       "$ax25_mod"
+status "kernel ax25"       "$kernel_ax25"
 status "ax25 transport"    "${transport:-disabled}"
 status "kiss tnc device"   "$tnc_ok"
 status "afsk sounddevice"  "$sounddevice_ok"
+status "afsk pyaudio"      "$pyaudio_ok"
 status "afsk input"        "$audio_input_ok"
 status "afsk output"       "$audio_output_ok"
 status "afsk ptt"          "$ptt_ok"

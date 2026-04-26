@@ -39,7 +39,7 @@ For hardware TNC support:
 python -m pip install -e ".[tnc]"
 ```
 
-For native Bell 202 soundcard receive support:
+For native Bell 202 soundcard support:
 
 ```bash
 python -m pip install -e ".[audio]"
@@ -470,9 +470,11 @@ Tested with:
 - **Kantronics KPC-3** and **KPC-9612** via serial KISS
 - **soundmodem** via TCP KISS
 
-Direct Bell 202 AFSK support is being added natively.  The current tree
-contains configuration plumbing and HDLC framing helpers, but not yet the
-finished soundcard modem/DSP implementation.
+pyBulletin’s AX.25 paths are userspace KISS or userspace AFSK paths. They do
+not require Linux kernel `AF_AX25`, `mkiss`, or `kissattach`; this keeps RF
+operation viable as in-kernel amateur-radio protocol support moves out of
+mainline Linux. Native Bell 202 AFSK includes RX/TX audio and PTT support, but
+still needs real-world radio/audio tuning and stronger noisy-channel recovery.
 
 ---
 

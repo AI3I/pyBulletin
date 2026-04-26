@@ -65,8 +65,8 @@ tcp_port = 8001
 
 [afsk]
 # Direct Bell 202 modem over USB soundcard / audio interface.
-# Current tree state: RX/TX Bell 202 audio paths exist; PTT supports no-op,
-# serial RTS, BCM GPIO, or gpiochip selectors when matching libraries exist.
+# Uses userspace audio/PTT and does not require kernel AX.25 modules.
+# PTT supports no-op, serial RTS, BCM GPIO, gpiochip, or CM108/CM119 HID.
 input_device  = ""
 output_device = ""
 sample_rate   = 48000
