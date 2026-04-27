@@ -34,8 +34,11 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("run-forward",   help="Run one forwarding cycle and exit")
     sub.add_parser("run-retention", help="Run message retention cleanup and exit")
     sub.add_parser("doctor",     help="Print deployment health summary")
-    sub.add_parser("doctor-rf",  help="Inspect userspace RF transport readiness")
+    rf = sub.add_parser("doctor-rf",  help="Inspect userspace RF transport readiness")
+    rf.add_argument("--connect-timeout", type=float, default=1.0,
+                    help="Seconds to wait when probing KISS TCP endpoints")
     sub.add_parser("doctor-afsk", help="Inspect native Bell 202 audio/PTT configuration and device support")
+    sub.add_parser("validate-config", help="Validate configuration and exit non-zero on errors")
     ptt = sub.add_parser("test-ptt", help="Key configured AFSK PTT briefly, then release it")
     ptt.add_argument("--selector", default="", help="Override [afsk].ptt_device for this test")
     ptt.add_argument("--duration", type=float, default=1.0, help="Seconds to key PTT, 0.1 to 10.0")
@@ -331,18 +334,18 @@ async def _cmd_doctor_afsk(config_path: str) -> None:
         print(f"  {key:<16}: {value.strip()}")
 
 
-async def _cmd_doctor_rf(config_path: str) -> None:
+async def _cmd_doctor_rf(config_path: str, connect_timeout: float = 1.0) -> None:
     cfg = load_config(config_path)
     print(f"pyBulletin {__version__}")
     print(f"  node             : {cfg.node.node_call}")
     print("  kernel_ax25      : not required")
     print(f"  selected         : {cfg.kiss.transport}")
-    for line in _rf_diagnostics(cfg):
+    for line in await _rf_diagnostics(cfg, connect_timeout=connect_timeout):
         key, _, value = line.partition(":")
         print(f"  {key:<16}: {value.strip()}")
 
 
-def _rf_diagnostics(cfg) -> list[str]:
+async def _rf_diagnostics(cfg, *, connect_timeout: float = 1.0) -> list[str]:
     from pathlib import Path
 
     lines: list[str] = []
@@ -358,7 +361,13 @@ def _rf_diagnostics(cfg) -> list[str]:
         else:
             lines.append("rf_ready         : maybe")
             lines.append(f"kiss_tcp         : {cfg.kiss.tcp_host}:{cfg.kiss.tcp_port}")
-            lines.append("next_check       : verify Dire Wolf/soundmodem is listening")
+            ok, detail = await _probe_tcp(cfg.kiss.tcp_host, cfg.kiss.tcp_port, connect_timeout)
+            if ok:
+                lines.append("kiss_tcp_connect : ok")
+                lines.append("next_check       : verify radio/PTT/audio on the KISS modem")
+            else:
+                lines[0] = "rf_ready         : no"
+                lines.append(f"kiss_tcp_connect : failed ({detail})")
         return lines
     if transport == "kiss_serial":
         if not cfg.kiss.device:
@@ -370,6 +379,12 @@ def _rf_diagnostics(cfg) -> list[str]:
         else:
             lines.append("rf_ready         : maybe")
             lines.append(f"kiss_serial      : {cfg.kiss.device} @ {cfg.kiss.baud}")
+        try:
+            import serial  # type: ignore[import]  # noqa: F401
+        except Exception:
+            lines.append("pyserial         : missing")
+        else:
+            lines.append("pyserial         : available")
         try:
             import serial_asyncio  # type: ignore[import]  # noqa: F401
         except Exception:
@@ -386,6 +401,76 @@ def _rf_diagnostics(cfg) -> list[str]:
     lines.append("rf_ready         : no")
     lines.append(f"reason           : unknown transport {transport!r}")
     return lines
+
+
+async def _probe_tcp(host: str, port: int, timeout: float) -> tuple[bool, str]:
+    timeout = max(0.1, min(10.0, float(timeout)))
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port),
+            timeout=timeout,
+        )
+    except Exception as exc:
+        return False, str(exc) or exc.__class__.__name__
+    writer.close()
+    try:
+        await writer.wait_closed()
+    except Exception:
+        pass
+    return True, "connected"
+
+
+def _config_issues(cfg) -> list[str]:
+    from pathlib import Path
+
+    issues: list[str] = []
+    transport = cfg.kiss.transport
+    if transport not in {"disabled", "kiss_tcp", "kiss_serial", "afsk"}:
+        issues.append(f"[kiss].transport has unsupported value {transport!r}")
+        return issues
+    if transport == "kiss_tcp":
+        if not cfg.kiss.tcp_host:
+            issues.append("[kiss].tcp_host is required when transport = kiss_tcp")
+        if not (1 <= int(cfg.kiss.tcp_port) <= 65535):
+            issues.append("[kiss].tcp_port must be between 1 and 65535")
+    elif transport == "kiss_serial":
+        if not cfg.kiss.device:
+            issues.append("[kiss].device is required when transport = kiss_serial")
+        elif not Path(cfg.kiss.device).exists():
+            issues.append(f"[kiss].device does not exist: {cfg.kiss.device}")
+        if int(cfg.kiss.baud) <= 0:
+            issues.append("[kiss].baud must be positive")
+    elif transport == "afsk":
+        if int(cfg.afsk.sample_rate) <= 0:
+            issues.append("[afsk].sample_rate must be positive")
+        if int(cfg.afsk.baud) <= 0:
+            issues.append("[afsk].baud must be positive")
+        if int(cfg.afsk.mark_hz) <= 0 or int(cfg.afsk.space_hz) <= 0:
+            issues.append("[afsk].mark_hz and [afsk].space_hz must be positive")
+        if cfg.afsk.mark_hz == cfg.afsk.space_hz:
+            issues.append("[afsk].mark_hz and [afsk].space_hz must differ")
+        if cfg.afsk.ptt_device:
+            try:
+                from .transport.afsk import _parse_ptt_selector
+
+                _parse_ptt_selector(cfg.afsk.ptt_device)
+            except Exception as exc:
+                issues.append(f"[afsk].ptt_device is invalid: {exc}")
+    return issues
+
+
+async def _cmd_validate_config(config_path: str) -> None:
+    cfg = load_config(config_path)
+    issues = _config_issues(cfg)
+    print(f"pyBulletin {__version__}")
+    print(f"  node             : {cfg.node.node_call}")
+    if not issues:
+        print("  config           : ok")
+        return
+    print("  config           : invalid")
+    for issue in issues:
+        print(f"  issue            : {issue}")
+    raise SystemExit(1)
 
 
 async def _cmd_test_ptt(config_path: str, selector: str, duration: float) -> None:
@@ -687,9 +772,11 @@ def main() -> None:
     elif args.command == "doctor":
         asyncio.run(_cmd_doctor(args.config))
     elif args.command == "doctor-rf":
-        asyncio.run(_cmd_doctor_rf(args.config))
+        asyncio.run(_cmd_doctor_rf(args.config, args.connect_timeout))
     elif args.command == "doctor-afsk":
         asyncio.run(_cmd_doctor_afsk(args.config))
+    elif args.command == "validate-config":
+        asyncio.run(_cmd_validate_config(args.config))
     elif args.command == "test-ptt":
         asyncio.run(_cmd_test_ptt(args.config, args.selector, args.duration))
     elif args.command == "run-forward":
