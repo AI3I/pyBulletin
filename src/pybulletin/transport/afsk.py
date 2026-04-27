@@ -875,6 +875,34 @@ def afsk_diagnostics(cfg: AfskConfig) -> list[str]:
     return lines
 
 
+async def afsk_test_ptt(selector: str, duration: float) -> list[str]:
+    duration = max(0.1, min(10.0, float(duration)))
+    lines = [f"ptt_duration     : {duration:.1f}s"]
+    if not selector:
+        lines.append("ptt_selector     : none")
+        lines.append("ptt_result       : no-op only; configure ptt_device to test hardware")
+        return lines
+    kind, params = _parse_ptt_selector(selector)
+    lines.append(f"ptt_selector     : {kind}")
+    ptt = _build_ptt(selector)
+    keyed = False
+    try:
+        await ptt.set_keyed(True)
+        keyed = True
+        lines.append("ptt_key          : on")
+        await asyncio.sleep(duration)
+        await ptt.set_keyed(False)
+        keyed = False
+        lines.append("ptt_key          : off")
+        lines.append("ptt_result       : ok")
+    finally:
+        if keyed:
+            with suppress(Exception):
+                ptt.set_keyed_blocking(False)
+        await ptt.close()
+    return lines
+
+
 def _find_cm108_hidraw_devices() -> list[str]:
     matches: list[str] = []
     for dev in sorted(Path("/sys/class/hidraw").glob("hidraw*")):

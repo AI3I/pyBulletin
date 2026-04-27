@@ -24,6 +24,7 @@ PYBULLETIN_FAIL2BAN_BADIP_STATE="${PYBULLETIN_FAIL2BAN_BADIP_STATE:-$PYBULLETIN_
 PYBULLETIN_SYSOP_BOOTSTRAP_NOTE="${PYBULLETIN_SYSOP_BOOTSTRAP_NOTE:-/root/pybulletin-initial-sysop.txt}"
 PYBULLETIN_TMP_SWAPFILE="${PYBULLETIN_TMP_SWAPFILE:-/swapfile-pybulletin}"
 PYBULLETIN_TMP_SWAP_MB="${PYBULLETIN_TMP_SWAP_MB:-1024}"
+PYBULLETIN_CONFIG_BACKUP_DIR="${PYBULLETIN_CONFIG_BACKUP_DIR:-$PYBULLETIN_APP_DIR/config/backups}"
 
 repo_root() {
   local src
@@ -296,6 +297,21 @@ install_config_if_missing() {
     install -o "$PYBULLETIN_USER" -g "$PYBULLETIN_GROUP" -m 0640 \
       "$root/$PYBULLETIN_CONFIG_SRC" "$PYBULLETIN_CONFIG_DEST"
   fi
+}
+
+backup_config_if_present() {
+  local stamp dest_dir config_dir file base
+  config_dir="$(dirname "$PYBULLETIN_CONFIG_DEST")"
+  [ -d "$config_dir" ] || return 0
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  dest_dir="$PYBULLETIN_CONFIG_BACKUP_DIR/$stamp"
+  for file in "$PYBULLETIN_CONFIG_DEST" "$config_dir/pybulletin.local.toml"; do
+    [ -f "$file" ] || continue
+    install -d -o "$PYBULLETIN_USER" -g "$PYBULLETIN_GROUP" -m 0750 "$dest_dir"
+    base="$(basename "$file")"
+    install -o "$PYBULLETIN_USER" -g "$PYBULLETIN_GROUP" -m 0640 "$file" "$dest_dir/$base"
+  done
+  [ -d "$dest_dir" ] && log "config backup created at $dest_dir"
 }
 
 install_optional_config_if_missing() {

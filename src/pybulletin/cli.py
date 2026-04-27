@@ -34,7 +34,11 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("run-forward",   help="Run one forwarding cycle and exit")
     sub.add_parser("run-retention", help="Run message retention cleanup and exit")
     sub.add_parser("doctor",     help="Print deployment health summary")
+    sub.add_parser("doctor-rf",  help="Inspect userspace RF transport readiness")
     sub.add_parser("doctor-afsk", help="Inspect native Bell 202 audio/PTT configuration and device support")
+    ptt = sub.add_parser("test-ptt", help="Key configured AFSK PTT briefly, then release it")
+    ptt.add_argument("--selector", default="", help="Override [afsk].ptt_device for this test")
+    ptt.add_argument("--duration", type=float, default=1.0, help="Seconds to key PTT, 0.1 to 10.0")
     return ap
 
 
@@ -327,6 +331,75 @@ async def _cmd_doctor_afsk(config_path: str) -> None:
         print(f"  {key:<16}: {value.strip()}")
 
 
+async def _cmd_doctor_rf(config_path: str) -> None:
+    cfg = load_config(config_path)
+    print(f"pyBulletin {__version__}")
+    print(f"  node             : {cfg.node.node_call}")
+    print("  kernel_ax25      : not required")
+    print(f"  selected         : {cfg.kiss.transport}")
+    for line in _rf_diagnostics(cfg):
+        key, _, value = line.partition(":")
+        print(f"  {key:<16}: {value.strip()}")
+
+
+def _rf_diagnostics(cfg) -> list[str]:
+    from pathlib import Path
+
+    lines: list[str] = []
+    transport = cfg.kiss.transport
+    if transport == "disabled":
+        lines.append("rf_ready         : no")
+        lines.append("reason           : [kiss].transport is disabled")
+        return lines
+    if transport == "kiss_tcp":
+        if not cfg.kiss.tcp_host:
+            lines.append("rf_ready         : no")
+            lines.append("reason           : [kiss].tcp_host is empty")
+        else:
+            lines.append("rf_ready         : maybe")
+            lines.append(f"kiss_tcp         : {cfg.kiss.tcp_host}:{cfg.kiss.tcp_port}")
+            lines.append("next_check       : verify Dire Wolf/soundmodem is listening")
+        return lines
+    if transport == "kiss_serial":
+        if not cfg.kiss.device:
+            lines.append("rf_ready         : no")
+            lines.append("reason           : [kiss].device is empty")
+        elif not Path(cfg.kiss.device).exists():
+            lines.append("rf_ready         : no")
+            lines.append(f"reason           : serial device missing ({cfg.kiss.device})")
+        else:
+            lines.append("rf_ready         : maybe")
+            lines.append(f"kiss_serial      : {cfg.kiss.device} @ {cfg.kiss.baud}")
+        try:
+            import serial_asyncio  # type: ignore[import]  # noqa: F401
+        except Exception:
+            lines.append("serial_asyncio   : missing")
+        else:
+            lines.append("serial_asyncio   : available")
+        return lines
+    if transport == "afsk":
+        from .transport.afsk import afsk_diagnostics
+
+        lines.append("rf_ready         : maybe")
+        lines.extend(afsk_diagnostics(cfg.afsk))
+        return lines
+    lines.append("rf_ready         : no")
+    lines.append(f"reason           : unknown transport {transport!r}")
+    return lines
+
+
+async def _cmd_test_ptt(config_path: str, selector: str, duration: float) -> None:
+    cfg = load_config(config_path)
+    from .transport.afsk import afsk_test_ptt
+
+    selected = selector or cfg.afsk.ptt_device
+    print(f"pyBulletin {__version__}")
+    print(f"  node             : {cfg.node.node_call}")
+    for line in await afsk_test_ptt(selected, duration):
+        key, _, value = line.partition(":")
+        print(f"  {key:<16}: {value.strip()}")
+
+
 async def _cmd_run_forward(config_path: str) -> None:
     from .store.store import BBSStore
     from .forward.scheduler import ForwardScheduler
@@ -613,8 +686,12 @@ def main() -> None:
         asyncio.run(_serve_web(args.config))
     elif args.command == "doctor":
         asyncio.run(_cmd_doctor(args.config))
+    elif args.command == "doctor-rf":
+        asyncio.run(_cmd_doctor_rf(args.config))
     elif args.command == "doctor-afsk":
         asyncio.run(_cmd_doctor_afsk(args.config))
+    elif args.command == "test-ptt":
+        asyncio.run(_cmd_test_ptt(args.config, args.selector, args.duration))
     elif args.command == "run-forward":
         asyncio.run(_cmd_run_forward(args.config))
     elif args.command == "run-retention":

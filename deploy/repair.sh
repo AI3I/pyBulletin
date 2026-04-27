@@ -14,6 +14,7 @@ ensure_dialout_membership
 ensure_audio_membership
 ensure_rf_runtime_packages
 ensure_layout
+backup_config_if_present
 sync_tree
 ensure_selinux_contexts
 install_config_if_missing
