@@ -33,7 +33,6 @@ max_line_length    = 256
 # Sysop console — bind to 127.0.0.1 and proxy via nginx for external access
 host        = "127.0.0.1"
 port        = 8080
-admin_token = ""   # set a long random token; required for sysop console access
 
 [public_web]
 enabled    = false
