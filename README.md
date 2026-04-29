@@ -56,6 +56,7 @@ The `deploy/` directory contains scripts for a production install on any systemd
 sudo bash deploy/install.sh
 
 # Upgrade to a newer version
+git pull --ff-only
 sudo bash deploy/upgrade.sh
 
 # Remove completely
@@ -71,6 +72,31 @@ sudo bash deploy/uninstall.sh
   - `pybulletin-forward.service` / `.timer` — scheduled forwarding
   - `pybulletin-retention.service` / `.timer` — nightly message cleanup
 - Drop a starter config at `/home/pybulletin/pyBulletin/config/pybulletin.toml`
+
+### Upgrade path
+
+For an existing install, update the checkout and run the upgrade helper:
+
+```bash
+cd /path/to/pyBulletin
+git pull --ff-only
+sudo bash deploy/upgrade.sh
+sudo bash deploy/doctor.sh
+```
+
+`upgrade.sh` backs up the installed config under
+`/home/pybulletin/pyBulletin/config/backups/`, syncs the application tree,
+refreshes systemd/fail2ban/logrotate files, and restarts both services. It also
+migrates the old hyphenated web unit name away: `pybulletin-web.service` is
+disabled and removed, and the active web unit is `pybulletinweb.service`.
+
+After upgrading, check:
+
+```bash
+systemctl status pybulletin.service
+systemctl status pybulletinweb.service
+curl -fsS http://127.0.0.1:8080/api/health
+```
 
 ### Additional deploy scripts
 
@@ -127,6 +153,24 @@ The BBS listens on:
 ## Web Interfaces
 
 pyBulletin ships two browser-based interfaces served by `pybulletinweb.service`.
+
+Operationally, `pybulletinweb.service` is just the web/API process. Manage it
+with normal systemd commands:
+
+```bash
+systemctl status pybulletinweb.service
+journalctl -u pybulletinweb.service -n 100 --no-pager
+systemctl restart pybulletinweb.service
+```
+
+It listens on `[web] host / port`, which defaults to `127.0.0.1:8080`. The
+public BBS UI is served at `/` when `[public_web] enabled = true`, and the sysop
+console is always served at `/sysop`. For remote browser access, keep the
+service bound to loopback and proxy it with nginx:
+
+```bash
+sudo bash deploy/setup-nginx.sh --domain bbs.example.net --email admin@example.net
+```
 
 ### Sysop Console (`/sysop`)
 

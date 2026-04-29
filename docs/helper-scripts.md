@@ -24,6 +24,7 @@ Common examples:
 
 ```bash
 sudo bash deploy/install.sh
+git pull --ff-only
 sudo bash deploy/upgrade.sh
 sudo bash deploy/repair.sh
 sudo bash deploy/doctor.sh
@@ -44,6 +45,52 @@ KEEP_DATA=0 KEEP_CONFIG=0 sudo -E bash deploy/uninstall.sh
 
 The old `pybulletin-web.service` name is obsolete. Install, upgrade, and repair
 remove it and reset any failed state during migration.
+
+## Upgrade Path
+
+For an existing deployment:
+
+```bash
+cd /path/to/pyBulletin
+git pull --ff-only
+sudo bash deploy/upgrade.sh
+sudo bash deploy/doctor.sh
+```
+
+`upgrade.sh` creates a timestamped config backup before syncing files, refreshes
+systemd/fail2ban/logrotate assets, restarts `pybulletin.service` and
+`pybulletinweb.service`, and waits for both to become active. Existing data and
+config stay in `/home/pybulletin/pyBulletin` unless you intentionally remove
+them.
+
+## Navigating `pybulletinweb.service`
+
+`pybulletinweb.service` is the standalone web/API process. It does not replace
+`pybulletin.service`; both should be active on a normal node.
+
+Useful commands:
+
+```bash
+systemctl status pybulletinweb.service
+journalctl -u pybulletinweb.service -n 100 --no-pager
+systemctl restart pybulletinweb.service
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+Default web paths:
+
+| Path | Purpose |
+|------|---------|
+| `/` | Public BBS UI, shown when `[public_web] enabled = true`. |
+| `/sysop` | Sysop console login page. |
+| `/api/health` | Unauthenticated health check. |
+
+The service defaults to `127.0.0.1:8080`. For remote access, proxy it through
+nginx with:
+
+```bash
+sudo bash deploy/setup-nginx.sh --domain bbs.example.net --email admin@example.net
+```
 
 ## Deployment Environment Overrides
 
