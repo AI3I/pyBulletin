@@ -76,14 +76,17 @@ sudo bash deploy/uninstall.sh
 
 | Script | Purpose |
 |--------|---------|
-| `deploy/strings.sh` | Push `strings.toml` only — hot-reloads in ≤30s, no restart needed |
-| `deploy/setup-nginx.sh` | Configure nginx as reverse proxy for the web interfaces |
+| `deploy/strings.sh` | Push `strings.toml` only — hot-reloads in about 30 seconds, no restart needed |
+| `deploy/setup-nginx.sh` | Configure nginx as a reverse proxy for `pybulletinweb.service` (`/` and `/sysop`) |
 | `deploy/doctor.sh` | Diagnose common configuration and permission problems |
-| `deploy/migrate.sh` | Run schema migrations on an existing database |
-| `deploy/repair.sh` | Attempt to repair a corrupted SQLite database |
-| `deploy/fail2ban/` | fail2ban filter and jail for Telnet brute-force protection |
+| `deploy/migrate.sh` | Import LinFBB/FBB data into pyBulletin |
+| `deploy/repair.sh` | Reapply packages, files, units, fail2ban/logrotate, config defaults, and service startup |
+| `deploy/fail2ban/` | fail2ban filters and jails for core and web authentication failures |
 | `deploy/logrotate/` | logrotate config for `/var/log/pybulletin/` |
 | `deploy/udev/` | udev rules for C-Media CM108/CM119 HID GPIO access |
+
+See [Helper Scripts](docs/helper-scripts.md) for the full deploy, maintenance,
+CLI diagnostic, and environment override reference.
 
 ### Helper scripts
 
@@ -117,7 +120,7 @@ The BBS listens on:
 | Telnet | `0.0.0.0:6300` | `[telnet] host / port` |
 | Sysop web console | `127.0.0.1:8080` | `[web] host / port` |
 | B2F inbound forward | `0.0.0.0:6301` | `[forward] listen_host / listen_port` |
-| Public web (opt.) | `127.0.0.1:8081` | `[public_web] host / port` |
+| Public web (opt.) | same as web service, `/` | `[public_web] enabled` |
 
 ---
 
@@ -154,11 +157,11 @@ Enable with:
 ```toml
 [public_web]
 enabled = true
-host    = "127.0.0.1"
-port    = 8081
 ```
 
-Proxy port 8081 through nginx (or any reverse proxy) for public internet access. Personal mail is never exposed through the public interface.
+Proxy `[web]` through nginx (or any reverse proxy) for public internet access.
+The public UI is `/`; the sysop console is `/sysop`. Personal mail is never
+exposed through the public interface.
 
 ### REST API
 
@@ -298,6 +301,9 @@ Diagnostics:
 
 ```bash
 pybulletin --config config/pybulletin.local.toml doctor-afsk
+pybulletin --config config/pybulletin.local.toml doctor-rf
+pybulletin --config config/pybulletin.local.toml validate-config
+pybulletin --config config/pybulletin.local.toml test-ptt --duration 0.5
 ```
 
 Deployment notes:
@@ -347,9 +353,11 @@ Generate a token with `python -c "import secrets; print(secrets.token_hex(32))"`
 ```toml
 [public_web]
 enabled = true
-host    = "127.0.0.1"
-port    = 8081
 ```
+
+The current web service serves the public UI and sysop console from `[web]`.
+The legacy `host` and `port` keys may be present in config files but are not a
+separate systemd service or listener.
 
 ---
 
@@ -498,8 +506,10 @@ Test files:
 |------|--------|
 | `tests/test_store.py` | SQLite store — messages, users, WP, prefs |
 | `tests/test_ax25.py` | AX.25 framing, KISS, connection state machine |
+| `tests/test_cli_rf.py` | RF diagnostics, config validation, and PTT command behavior |
 | `tests/test_forward.py` | SID parsing, B1/B2F proposal and message encoding |
 | `tests/test_engine.py` | Command dispatch via `FakeSession` |
+| `tests/test_web_server.py` | stdlib HTTP server behavior, including `HEAD` support |
 
 ---
 
@@ -517,7 +527,7 @@ src/pybulletin/
   forward/          — B2F forwarding: SID, protocol, scheduler
   ax25/             — AX.25 framing, KISS TNC transport
   transport/        — abstract transport layer
-  web/              — aiohttp sysop console + public web
+  web/              — stdlib HTTP/WebSocket sysop console + public web
   address.py        — hierarchical bulletin address matching
 vendor/
   lzhuf.py          — pure-Python LZHUF compression (B2F)
