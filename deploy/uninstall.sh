@@ -15,7 +15,7 @@ stop_service
 
 for unit in \
   "$PYBULLETIN_SERVICE_NAME" \
-  pybulletin-web.service \
+  "$PYBULLETIN_WEB_SERVICE_NAME" \
   "$PYBULLETIN_FORWARD_SERVICE_NAME" \
   "$PYBULLETIN_FORWARD_TIMER_NAME" \
   "$PYBULLETIN_RETENTION_SERVICE_NAME" \
@@ -27,6 +27,7 @@ done
 rm -f "$PYBULLETIN_FAIL2BAN_DIR/filter.d/pybulletin-auth-core.conf"
 rm -f "$PYBULLETIN_FAIL2BAN_DIR/filter.d/pybulletin-auth-web.conf"
 rm -f "$PYBULLETIN_FAIL2BAN_DIR/jail.d/pybulletin-core.local"
+rm -f "$PYBULLETIN_FAIL2BAN_DIR/jail.d/pybulletinweb.local"
 rm -f "$PYBULLETIN_FAIL2BAN_DIR/jail.d/pybulletin-web.local"
 rm -f "$PYBULLETIN_FAIL2BAN_DIR/jail.d/pybulletin-disable-defaults.local"
 rm -f "$PYBULLETIN_LOGROTATE_DIR/pybulletin"

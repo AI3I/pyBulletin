@@ -7,6 +7,7 @@ PYBULLETIN_GROUP="${PYBULLETIN_GROUP:-$PYBULLETIN_USER}"
 PYBULLETIN_HOME="${PYBULLETIN_HOME:-/home/$PYBULLETIN_USER}"
 PYBULLETIN_APP_DIR="${PYBULLETIN_APP_DIR:-$PYBULLETIN_HOME/pyBulletin}"
 PYBULLETIN_SERVICE_NAME="${PYBULLETIN_SERVICE_NAME:-pybulletin.service}"
+PYBULLETIN_WEB_SERVICE_NAME="${PYBULLETIN_WEB_SERVICE_NAME:-pybulletinweb.service}"
 PYBULLETIN_FORWARD_SERVICE_NAME="${PYBULLETIN_FORWARD_SERVICE_NAME:-pybulletin-forward.service}"
 PYBULLETIN_FORWARD_TIMER_NAME="${PYBULLETIN_FORWARD_TIMER_NAME:-pybulletin-forward.timer}"
 PYBULLETIN_RETENTION_SERVICE_NAME="${PYBULLETIN_RETENTION_SERVICE_NAME:-pybulletin-retention.service}"
@@ -329,6 +330,7 @@ install_or_refresh_service() {
   root="$(repo_root)"
   for unit in \
     pybulletin.service \
+    pybulletinweb.service \
     pybulletin-forward.service \
     pybulletin-forward.timer \
     pybulletin-retention.service \
@@ -338,7 +340,7 @@ install_or_refresh_service() {
       "$root/deploy/systemd/$unit" \
       "$PYBULLETIN_SYSTEMD_DIR/$unit"
   done
-  # Remove legacy split web service; pybulletin.service now serves core + web.
+  # Remove legacy hyphenated split web unit if present.
   systemctl disable --now pybulletin-web.service >/dev/null 2>&1 || true
   rm -f "$PYBULLETIN_SYSTEMD_DIR/pybulletin-web.service"
   systemctl daemon-reload
@@ -346,6 +348,7 @@ install_or_refresh_service() {
 }
 
 service_is_active()     { systemctl is-active --quiet "$PYBULLETIN_SERVICE_NAME"; }
+web_service_is_active() { systemctl is-active --quiet "$PYBULLETIN_WEB_SERVICE_NAME"; }
 
 wait_for_systemd_active() {
   local unit="$1" timeout="${2:-30}" start now state
@@ -367,20 +370,28 @@ restart_service_hard() {
   systemctl start "$PYBULLETIN_SERVICE_NAME"
 }
 
+restart_web_service_hard() {
+  web_service_is_active && { systemctl kill -s SIGKILL "$PYBULLETIN_WEB_SERVICE_NAME" || true; sleep 1; }
+  systemctl start "$PYBULLETIN_WEB_SERVICE_NAME"
+}
+
 enable_service() {
   systemctl enable "$PYBULLETIN_SERVICE_NAME" >/dev/null
+  systemctl enable "$PYBULLETIN_WEB_SERVICE_NAME" >/dev/null
   systemctl enable --now "$PYBULLETIN_FORWARD_TIMER_NAME"   >/dev/null
   systemctl enable --now "$PYBULLETIN_RETENTION_TIMER_NAME" >/dev/null
 }
 
 disable_service() {
   systemctl disable "$PYBULLETIN_SERVICE_NAME"     >/dev/null 2>&1 || true
+  systemctl disable "$PYBULLETIN_WEB_SERVICE_NAME" >/dev/null 2>&1 || true
   systemctl disable --now "$PYBULLETIN_FORWARD_TIMER_NAME"   >/dev/null 2>&1 || true
   systemctl disable --now "$PYBULLETIN_RETENTION_TIMER_NAME" >/dev/null 2>&1 || true
 }
 
 stop_service() {
   systemctl stop "$PYBULLETIN_SERVICE_NAME"        >/dev/null 2>&1 || true
+  systemctl stop "$PYBULLETIN_WEB_SERVICE_NAME"    >/dev/null 2>&1 || true
   systemctl stop "$PYBULLETIN_FORWARD_TIMER_NAME"  >/dev/null 2>&1 || true
   systemctl stop "$PYBULLETIN_RETENTION_TIMER_NAME" >/dev/null 2>&1 || true
 }
@@ -405,12 +416,13 @@ install_or_refresh_fail2ban() {
     filter.d/pybulletin-auth-core.conf \
     filter.d/pybulletin-auth-web.conf \
     jail.d/pybulletin-core.local \
-    jail.d/pybulletin-web.local
+    jail.d/pybulletinweb.local
   do
     install -o root -g root -m 0644 \
       "$root/deploy/fail2ban/$f" \
       "$PYBULLETIN_FAIL2BAN_DIR/$f"
   done
+  rm -f "$PYBULLETIN_FAIL2BAN_DIR/jail.d/pybulletin-web.local"
   cat >"$PYBULLETIN_FAIL2BAN_DIR/jail.d/pybulletin-disable-defaults.local" <<'EOF'
 [sshd]
 enabled = false
@@ -465,12 +477,12 @@ apply_imported_fail2ban_badips() {
     : >"$prev"
   fi
   for entry in $(comm -23 "$prev" "$tmp"); do
-    for jail in pybulletin-core-auth pybulletin-web-auth; do
+    for jail in pybulletin-core-auth pybulletinweb-auth; do
       "$client" set "$jail" unbanip "$entry" >/dev/null 2>&1 || true
     done
   done
   for entry in $(comm -13 "$prev" "$tmp"); do
-    for jail in pybulletin-core-auth pybulletin-web-auth; do
+    for jail in pybulletin-core-auth pybulletinweb-auth; do
       "$client" set "$jail" banip "$entry" >/dev/null 2>&1 || true
     done
   done

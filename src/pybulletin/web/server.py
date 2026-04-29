@@ -22,7 +22,7 @@ import logging
 import mimetypes
 import os
 import urllib.parse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Awaitable
 
@@ -327,18 +327,22 @@ class HTTPServer:
                 await self._upgrade_ws(reader, writer, req)
                 return
 
+            # HEAD uses the same routing as GET, but sends headers only.
+            route_req = replace(req, method="GET") if req.method == "HEAD" else req
+            include_body = req.method != "HEAD"
+
             # Static file?
-            if req.method == "GET" and self._static_dir:
-                resp = self._serve_static(req)
+            if route_req.method == "GET" and self._static_dir:
+                resp = self._serve_static(route_req)
                 if resp is not None:
-                    await self._write_response(writer, resp)
+                    await self._write_response(writer, resp, include_body=include_body)
                     if req.header("connection").lower() == "close":
                         return
                     continue
 
             # Application handler
             try:
-                resp = await self._handler(req)
+                resp = await self._handler(route_req)
             except Exception:
                 LOG.exception("web: handler error for %s %s", req.method, req.path)
                 resp = HTTPResponse.error()
@@ -346,7 +350,7 @@ class HTTPServer:
             if resp is None:
                 resp = HTTPResponse.not_found()
 
-            await self._write_response(writer, resp)
+            await self._write_response(writer, resp, include_body=include_body)
 
             conn = req.header("connection").lower()
             if conn == "close" or req.headers.get("http-version", "1.1") == "1.0":
@@ -456,7 +460,7 @@ class HTTPServer:
         return HTTPResponse(headers=headers, body=target.read_bytes())
 
     async def _write_response(
-        self, writer: asyncio.StreamWriter, resp: HTTPResponse
+        self, writer: asyncio.StreamWriter, resp: HTTPResponse, *, include_body: bool = True
     ) -> None:
         status_text = _STATUS_TEXT.get(resp.status, "Unknown")
         lines = [f"HTTP/1.1 {resp.status} {status_text}"]
@@ -468,6 +472,6 @@ class HTTPServer:
         lines.append("")
         lines.append("")
         writer.write("\r\n".join(lines).encode())
-        if resp.body:
+        if include_body and resp.body:
             writer.write(resp.body)
         await writer.drain()

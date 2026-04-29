@@ -29,7 +29,9 @@ enable_service
 bootstrap_sysop_account
 show_sysop_bootstrap_note
 restart_service_hard
+restart_web_service_hard
 enable_fail2ban_service
 apply_imported_fail2ban_badips
 wait_for_systemd_active "$PYBULLETIN_SERVICE_NAME"     45 || die "core service failed to start"
+wait_for_systemd_active "$PYBULLETIN_WEB_SERVICE_NAME" 45 || die "web service failed to start"
 log "install complete"

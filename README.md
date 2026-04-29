@@ -66,7 +66,8 @@ sudo bash deploy/uninstall.sh
 - Create a dedicated `pybulletin` system user and group
 - Install the application tree into `/home/pybulletin/pyBulletin`
 - Install and enable systemd units:
-  - `pybulletin.service` — main BBS (Telnet + web)
+  - `pybulletin.service` — core BBS service (Telnet + RF + forwarding)
+  - `pybulletinweb.service` — web UI and sysop console
   - `pybulletin-forward.service` / `.timer` — scheduled forwarding
   - `pybulletin-retention.service` / `.timer` — nightly message cleanup
 - Drop a starter config at `/home/pybulletin/pyBulletin/config/pybulletin.toml`
@@ -122,7 +123,7 @@ The BBS listens on:
 
 ## Web Interfaces
 
-pyBulletin ships two browser-based interfaces served from the same process.
+pyBulletin ships two browser-based interfaces served by `pybulletinweb.service`.
 
 ### Sysop Console (`/sysop`)
 
