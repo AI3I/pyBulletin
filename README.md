@@ -114,6 +114,9 @@ curl -fsS http://127.0.0.1:8080/api/health
 See [Helper Scripts](docs/helper-scripts.md) for the full deploy, maintenance,
 CLI diagnostic, and environment override reference.
 
+See [Release Readiness](docs/release-readiness.md) for the current ship/field
+validation split.
+
 ### Helper scripts
 
 | Script | Purpose |
@@ -327,7 +330,8 @@ Current status:
 - DCD and more robust carrier/symbol recovery are still under development
 
 Common interface patterns:
-- Kits4Hams SHARI and similar Pi-mounted nodes: soundcard I/O plus `gpio:<bcm_pin>` or `gpiochip:/dev/gpiochip0:<line>` if PTT is wired to GPIO
+- Kits4Hams SHARI Pi3V and similar Pi-mounted radio nodes: start with Dire Wolf as a TCP KISS modem, then use native `afsk` only for direct modem validation
+- SHARI native `afsk`: soundcard I/O plus `gpio:<bcm_pin>` or `gpiochip:/dev/gpiochip0:<line>` if PTT is wired to GPIO
 - Masters Communications, DMK URI/RIM, and many CM108/119-based USB interfaces: soundcard I/O plus `cm108:/dev/hidrawN:<gpio_pin>`
 - modified generic CM108/CM119 USB fobs belong in that same CM108/119 `hidraw` bucket
 - Kits4Hams `DINAH` and `PAUL`: scope these with the CM108/CM119 USB-interface family, not the SHARI embedded-radio family
@@ -337,6 +341,7 @@ Common interface patterns:
 
 Full hardware matrix and setup notes:
 - [Hardware Guide](/home/jdlewis/GitHub/pyBulletin/docs/hardware.md)
+- [Raspberry Pi 3B+ + SHARI Pi3V + Dire Wolf](/home/jdlewis/GitHub/pyBulletin/docs/hardware/direwolf-shari-pi.md)
 
 Examples:
 

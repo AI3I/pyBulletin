@@ -15,7 +15,7 @@ The key distinction is:
 | CM108/CM119 USB radio interfaces | modified CM108/CM119 USB fobs, DMK `URI`, `URIx`, Repeater Builder `RIM-Lite`, Masters `RA-25/33/35/40/42`, `RA-DR1X`, Kits4Hams `DINAH`, Kits4Hams `PAUL` | `afsk` | USB soundcard | `cm108:/dev/hidrawN:<pin>` | Best fit for native AFSK when the board exposes C-Media HID GPIO |
 | Generic USB soundcard interfaces | `SignaLink USB`, generic C-Media or similar USB audio dongles | `afsk` | USB soundcard | VOX, none, `serial_rts:...`, or external GPIO | Good fit when the interface is just audio and PTT is handled elsewhere |
 | Pi codec / radio HATs | NW Digital Radio `UDRC`, `DRAWS` | `afsk` | ALSA / I2S codec | `gpio:<bcm_pin>` or `gpiochip:...` | These are soundcard-style interfaces, not CM108 HID devices |
-| Integrated Pi radio boards | Kits4Hams `SHARI`, Kits4Hams `BRIAN` | `afsk` | board audio path | usually GPIO or board-specific control | Requires radio/audio-level tuning in addition to software setup |
+| Integrated Pi radio boards | Kits4Hams `SHARI`, Kits4Hams `BRIAN` | recommended: `kiss_tcp` with Dire Wolf; native/lab: `afsk` | board audio path | Dire Wolf or board-specific GPIO/control | Requires radio/audio-level tuning in addition to software setup |
 | Legacy / specialty host interfaces | Quad Radio PCI and similar host-attached radio cards | likely `afsk` | host audio / board-specific | board-specific | Mentioned for scope; not specifically validated in-tree yet |
 | USB / serial KISS TNCs | `TNC-X`, Kantronics KISS-capable units | `kiss_serial` | external modem | serial | Use when the hardware is already a modem/TNC |
 | Network or software KISS endpoints | Dire Wolf, `soundmodem`, network KISS servers | `kiss_tcp` | external modem | TCP | Not a native-AFSK case from pyBulletin’s perspective |
@@ -98,6 +98,10 @@ Detailed recipe:
 
 Boards like `SHARI` combine the radio and interface logic more tightly.
 
+For first deployment, use Dire Wolf as the modem and configure pyBulletin for
+`kiss_tcp`. Use native `afsk` only when you specifically want to validate
+pyBulletin's userspace modem path.
+
 They still belong under `afsk`, but they need extra care for:
 
 - RX/TX audio levels
@@ -132,6 +136,9 @@ transport = "kiss_tcp"
 tcp_host  = "127.0.0.1"
 tcp_port  = 8001
 ```
+
+Detailed recipe:
+- [Raspberry Pi 3B+ + SHARI Pi3V + Dire Wolf](hardware/direwolf-shari-pi.md)
 
 ## Other Scoped Hardware
 
