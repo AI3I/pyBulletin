@@ -71,17 +71,19 @@ The public UI and sysop console share the same backend:
 - `/api/health` is unauthenticated
 - other `/api/*` paths require an authenticated session
 
-The built-in sysop authentication is required, but internet-facing nodes may
-also want one of these additional nginx controls:
+The built-in sysop authentication is required, but internet-facing nodes can
+also enable nginx controls in `deploy/setup-nginx.sh`:
 
-- IP allowlists for trusted admin networks
-- HTTP basic authentication in front of `/sysop`
+- `--admin-allow CIDR` for trusted admin networks
+- `--admin-basic-auth FILE` for HTTP basic authentication
 - a VPN or SSH tunnel for sysop access
 - a separate private hostname for operator access
 
-Be careful with path-only restrictions: sysop browser operations also use
-`/api/*` and `/ws`, so a reverse-proxy policy that protects only `/sysop` is not
-a complete admin isolation boundary.
+The generated nginx controls protect `/sysop`, `/api/`, and `/ws`, while leaving
+`/api/health` open for monitoring. Use them for operator-only deployments or a
+private admin hostname. Be careful on public web nodes: public browser workflows
+may also use API routes, so coarse `/api/` restrictions are intentionally
+conservative.
 
 ## Future Development
 

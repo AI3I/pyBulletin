@@ -18,7 +18,7 @@ environment variables.
 | `deploy/doctor.sh` | Prints service, config, database, fail2ban, SELinux, AX.25, AFSK audio, PTT, CM108/CM119, and API health status. |
 | `deploy/migrate.sh` | Imports LinFBB/FBB data through `scripts/migrate_fbb.py`. Requires `--from-fbb PATH`; accepts `--config PATH` and `--dry-run`. |
 | `deploy/strings.sh` | Pushes `config/strings.toml` to a remote node over `rsync`; the running node hot-reloads strings within about 30 seconds. |
-| `deploy/setup-nginx.sh` | Installs nginx and proxies the single `pybulletinweb.service` backend. Public UI is `/`; sysop console is `/sysop`. Use `--domain DOMAIN`, optional `--email EMAIL`, `--no-tls`, and `--web-port PORT`. |
+| `deploy/setup-nginx.sh` | Installs nginx and proxies the single `pybulletinweb.service` backend. Public UI is `/`; sysop console is `/sysop`. Use `--domain DOMAIN`, optional `--email EMAIL`, `--no-tls`, `--web-port PORT`, `--admin-allow CIDR`, and `--admin-basic-auth FILE`. |
 
 Common examples:
 
@@ -31,6 +31,7 @@ sudo bash deploy/doctor.sh
 sudo bash deploy/migrate.sh --from-fbb /fbb --dry-run
 bash deploy/strings.sh root@pybulletin.ai3i.net
 sudo bash deploy/setup-nginx.sh --domain bbs.example.net --email admin@example.net
+sudo bash deploy/setup-nginx.sh --domain bbs.example.net --email admin@example.net --admin-allow 192.0.2.0/24
 KEEP_DATA=0 KEEP_CONFIG=0 sudo -E bash deploy/uninstall.sh
 ```
 
@@ -91,6 +92,26 @@ nginx with:
 ```bash
 sudo bash deploy/setup-nginx.sh --domain bbs.example.net --email admin@example.net
 ```
+
+Optional admin controls:
+
+```bash
+sudo bash deploy/setup-nginx.sh \
+  --domain bbs.example.net \
+  --email admin@example.net \
+  --admin-allow 192.0.2.0/24 \
+  --admin-allow 2001:db8::/32
+
+sudo bash deploy/setup-nginx.sh \
+  --domain bbs.example.net \
+  --email admin@example.net \
+  --admin-basic-auth /etc/nginx/pybulletin-sysop.htpasswd
+```
+
+These controls apply to `/sysop`, `/api/`, and `/ws`, while leaving
+`/api/health` open for monitoring. Use them for operator-only deployments,
+VPN/trusted-net access, or a private admin hostname. They can interfere with a
+public web UI that needs browser API access.
 
 ## Deployment Environment Overrides
 

@@ -175,6 +175,16 @@ service bound to loopback and proxy it with nginx:
 sudo bash deploy/setup-nginx.sh --domain bbs.example.net --email admin@example.net
 ```
 
+For operator-only or private-admin deployments, the nginx helper can also add
+IP allowlists or HTTP basic auth around `/sysop`, `/api/`, and `/ws`:
+
+```bash
+sudo bash deploy/setup-nginx.sh \
+  --domain bbs.example.net \
+  --email admin@example.net \
+  --admin-allow 192.0.2.0/24
+```
+
 ### Sysop Console (`/sysop`)
 
 A password-authenticated single-page application for node operators. Accessible at `http://127.0.0.1:8080/sysop` by default (bind to loopback and proxy via nginx for external access).
