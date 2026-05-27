@@ -48,7 +48,7 @@ ptt_device    = "cm108:/dev/hidraw0:3"
 `hidraw` devices.
 
 Detailed recipe:
-- [CM108 / CM119 Interfaces](/home/jdlewis/GitHub/pyBulletin/docs/hardware/cm108-interfaces.md)
+- [CM108 / CM119 Interfaces](hardware/cm108-interfaces.md)
 - [External Radio Interface Families](hardware/external-interface-families.md)
 
 ### Generic USB Soundcards
@@ -71,7 +71,7 @@ If the interface uses VOX, leaving `ptt_device` empty is often correct.
 If it has a separate serial-keying path, use `serial_rts:/dev/ttyUSB0`.
 
 Detailed recipe:
-- [SignaLink USB](/home/jdlewis/GitHub/pyBulletin/docs/hardware/signalink.md)
+- [SignaLink USB](hardware/signalink.md)
 
 ### Pi Codec Boards
 
@@ -94,7 +94,7 @@ The important point is that these usually want GPIO or `gpiochip` PTT, not the
 CM108 `hidraw` path.
 
 Detailed recipe:
-- [UDRC / DRAWS](/home/jdlewis/GitHub/pyBulletin/docs/hardware/udrc-draws.md)
+- [UDRC / DRAWS](hardware/udrc-draws.md)
 
 ### Integrated Radio Boards
 
@@ -112,8 +112,8 @@ They still belong under `afsk`, but they need extra care for:
 - whatever PTT/control path the board exposes
 
 Detailed recipe:
-- [SHARI](/home/jdlewis/GitHub/pyBulletin/docs/hardware/shari.md)
-- [BRIAN](/home/jdlewis/GitHub/pyBulletin/docs/hardware/brian.md)
+- [SHARI](hardware/shari.md)
+- [BRIAN](hardware/brian.md)
 
 ## KISS Device Classes
 

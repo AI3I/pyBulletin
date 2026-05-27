@@ -54,7 +54,7 @@ is the safer first modem choice until pyBulletin's native `afsk` path has more
 field time on this hardware.
 
 For Kits4Hams `DINAH` and `PAUL`, see:
-- [CM108 / CM119 Interfaces](/home/jdlewis/GitHub/pyBulletin/docs/hardware/cm108-interfaces.md)
+- [CM108 / CM119 Interfaces](cm108-interfaces.md)
 
 For Kits4Hams `BRIAN`, see:
-- [BRIAN](/home/jdlewis/GitHub/pyBulletin/docs/hardware/brian.md)
+- [BRIAN](brian.md)

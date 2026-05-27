@@ -360,9 +360,9 @@ Common interface patterns:
 - AllStar ARI / URI / RIM style interfaces: soundcard I/O plus whichever PTT path the interface exposes, typically CM108 HID, GPIO, or serial RTS
 
 Full hardware matrix and setup notes:
-- [Hardware Guide](/home/jdlewis/GitHub/pyBulletin/docs/hardware.md)
-- [External Radio Interface Families](/home/jdlewis/GitHub/pyBulletin/docs/hardware/external-interface-families.md)
-- [Raspberry Pi 3B+ + SHARI Pi3V + Dire Wolf](/home/jdlewis/GitHub/pyBulletin/docs/hardware/direwolf-shari-pi.md)
+- [Hardware Guide](docs/hardware.md)
+- [External Radio Interface Families](docs/hardware/external-interface-families.md)
+- [Raspberry Pi 3B+ + SHARI Pi3V + Dire Wolf](docs/hardware/direwolf-shari-pi.md)
 
 Examples:
 
