@@ -175,6 +175,7 @@ def test_build_afsk_config():
         "input_device": "hw:1,0",
         "output_device": "hw:1,0",
         "sample_rate": 44100,
+        "port": 4,
         "baud": 1200,
         "mark_hz": 1200,
         "space_hz": 2200,
@@ -184,6 +185,7 @@ def test_build_afsk_config():
     assert cfg.input_device == "hw:1,0"
     assert cfg.output_device == "hw:1,0"
     assert cfg.sample_rate == 44100
+    assert cfg.port == 4
     assert cfg.baud == 1200
     assert cfg.mark_hz == 1200
     assert cfg.space_hz == 2200
@@ -197,10 +199,12 @@ def test_build_kiss_transport_selector():
         "transport": "kiss_tcp",
         "tcp_host": "127.0.0.1",
         "tcp_port": 8001,
+        "default_port": 2,
     })
     assert cfg.transport == "kiss_tcp"
     assert cfg.tcp_host == "127.0.0.1"
     assert cfg.tcp_port == 8001
+    assert cfg.default_port == 2
 
 
 def test_parse_ptt_selector_serial_rts():

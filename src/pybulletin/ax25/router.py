@@ -10,7 +10,7 @@ Responsibilities:
   - Accept incoming SABM frames to create new server-mode connections
   - Spawn a BBSSession task for each new connected station
   - Route outbound frames back to the KISS link on the correct port
-  - Send UI beacons on demand
+  - Send UI beacons and local-originated UI frames on demand
   - Maintain a heard-station log for sysop visibility
 
 Multi-port KISS (Dire Wolf multi-channel)
@@ -68,6 +68,7 @@ class AX25Router:
         self._conf_hub = conference_hub
 
         self._local_addr = AX25Address.parse(cfg.node.node_call)
+        self._default_port = int(cfg.kiss.default_port)
         # Active connections keyed by remote callsign string
         self._connections: dict[str, AX25Connection] = {}
         self._session_tasks: dict[str, asyncio.Task] = {}
@@ -198,13 +199,14 @@ class AX25Router:
         dest: str,
         info: bytes,
         via: list[str] | None = None,
-        port: int = 0,
+        port: int | None = None,
     ) -> None:
         dest_addr = AX25Address.parse(dest)
         src_addr  = AX25Address(self._local_addr.callsign, self._local_addr.ssid)
         reps      = [AX25Address.parse(v) for v in (via or [])]
         frame = AX25Frame.ui(dest_addr, src_addr, info, repeaters=reps)
-        await self._send_cb(frame, port)
+        tx_port = self._default_port if port is None else port
+        await self._send_cb(frame, tx_port)
 
     # ------------------------------------------------------------------
     # Status / visibility

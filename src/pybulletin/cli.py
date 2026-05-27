@@ -38,6 +38,7 @@ def _build_parser() -> argparse.ArgumentParser:
     rf.add_argument("--connect-timeout", type=float, default=1.0,
                     help="Seconds to wait when probing KISS TCP endpoints")
     sub.add_parser("doctor-afsk", help="Inspect native Bell 202 audio/PTT configuration and device support")
+    sub.add_parser("doctor-pactor", help="Inspect PACTOR HOST-mode serial configuration")
     sub.add_parser("validate-config", help="Validate configuration and exit non-zero on errors")
     ptt = sub.add_parser("test-ptt", help="Key configured AFSK PTT briefly, then release it")
     ptt.add_argument("--selector", default="", help="Override [afsk].ptt_device for this test")
@@ -334,6 +335,17 @@ async def _cmd_doctor_afsk(config_path: str) -> None:
         print(f"  {key:<16}: {value.strip()}")
 
 
+async def _cmd_doctor_pactor(config_path: str) -> None:
+    cfg = load_config(config_path)
+    from .transport.pactor import pactor_diagnostics
+
+    print(f"pyBulletin {__version__}")
+    print(f"  node             : {cfg.node.node_call}")
+    for line in pactor_diagnostics(cfg.pactor):
+        key, _, value = line.partition(":")
+        print(f"  {key:<16}: {value.strip()}")
+
+
 async def _cmd_doctor_rf(config_path: str, connect_timeout: float = 1.0) -> None:
     cfg = load_config(config_path)
     print(f"pyBulletin {__version__}")
@@ -361,6 +373,7 @@ async def _rf_diagnostics(cfg, *, connect_timeout: float = 1.0) -> list[str]:
         else:
             lines.append("rf_ready         : maybe")
             lines.append(f"kiss_tcp         : {cfg.kiss.tcp_host}:{cfg.kiss.tcp_port}")
+            lines.append(f"kiss_port        : {cfg.kiss.default_port}")
             ok, detail = await _probe_tcp(cfg.kiss.tcp_host, cfg.kiss.tcp_port, connect_timeout)
             if ok:
                 lines.append("kiss_tcp_connect : ok")
@@ -379,6 +392,7 @@ async def _rf_diagnostics(cfg, *, connect_timeout: float = 1.0) -> list[str]:
         else:
             lines.append("rf_ready         : maybe")
             lines.append(f"kiss_serial      : {cfg.kiss.device} @ {cfg.kiss.baud}")
+            lines.append(f"kiss_port        : {cfg.kiss.default_port}")
         try:
             import serial  # type: ignore[import]  # noqa: F401
         except Exception:
@@ -433,6 +447,8 @@ def _config_issues(cfg) -> list[str]:
             issues.append("[kiss].tcp_host is required when transport = kiss_tcp")
         if not (1 <= int(cfg.kiss.tcp_port) <= 65535):
             issues.append("[kiss].tcp_port must be between 1 and 65535")
+        if not (0 <= int(cfg.kiss.default_port) <= 15):
+            issues.append("[kiss].default_port must be between 0 and 15")
     elif transport == "kiss_serial":
         if not cfg.kiss.device:
             issues.append("[kiss].device is required when transport = kiss_serial")
@@ -440,11 +456,15 @@ def _config_issues(cfg) -> list[str]:
             issues.append(f"[kiss].device does not exist: {cfg.kiss.device}")
         if int(cfg.kiss.baud) <= 0:
             issues.append("[kiss].baud must be positive")
+        if not (0 <= int(cfg.kiss.default_port) <= 15):
+            issues.append("[kiss].default_port must be between 0 and 15")
     elif transport == "afsk":
         if int(cfg.afsk.sample_rate) <= 0:
             issues.append("[afsk].sample_rate must be positive")
         if int(cfg.afsk.baud) <= 0:
             issues.append("[afsk].baud must be positive")
+        if not (0 <= int(cfg.afsk.port) <= 15):
+            issues.append("[afsk].port must be between 0 and 15")
         if int(cfg.afsk.mark_hz) <= 0 or int(cfg.afsk.space_hz) <= 0:
             issues.append("[afsk].mark_hz and [afsk].space_hz must be positive")
         if cfg.afsk.mark_hz == cfg.afsk.space_hz:
@@ -456,6 +476,15 @@ def _config_issues(cfg) -> list[str]:
                 _parse_ptt_selector(cfg.afsk.ptt_device)
             except Exception as exc:
                 issues.append(f"[afsk].ptt_device is invalid: {exc}")
+    if not (0 <= int(cfg.beacon.port) <= 15):
+        issues.append("[beacon].port must be between 0 and 15")
+    if cfg.pactor.enabled:
+        if not cfg.pactor.device:
+            issues.append("[pactor].device is required when PACTOR is enabled")
+        if int(cfg.pactor.baud) <= 0:
+            issues.append("[pactor].baud must be positive")
+        if not (1 <= int(cfg.pactor.paclen) <= 255):
+            issues.append("[pactor].paclen must be between 1 and 255")
     return issues
 
 
@@ -775,6 +804,8 @@ def main() -> None:
         asyncio.run(_cmd_doctor_rf(args.config, args.connect_timeout))
     elif args.command == "doctor-afsk":
         asyncio.run(_cmd_doctor_afsk(args.config))
+    elif args.command == "doctor-pactor":
+        asyncio.run(_cmd_doctor_pactor(args.config))
     elif args.command == "validate-config":
         asyncio.run(_cmd_validate_config(args.config))
     elif args.command == "test-ptt":

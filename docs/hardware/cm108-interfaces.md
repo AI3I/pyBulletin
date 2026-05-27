@@ -9,14 +9,19 @@ Typical examples:
 - DMK `URI`, `URIx`
 - Repeater Builder `RIM-Lite`
 - Masters Communications `RA-25`, `RA-33`, `RA-35`, `RA-40`, `RA-42`, `RA-DR1X`
+- Masters Communications `DRA` family boards when they expose C-Media USB audio/control paths
 - Kits4Hams `DINAH`
 - Kits4Hams `PAUL`
 
 ## Fit
 
-- Mode: `afsk`
+- Recommended first mode: `kiss_tcp` through Dire Wolf
+- Native/lab mode: `afsk`
 - Audio path: USB soundcard
 - PTT path: `cm108:/dev/hidrawN:<pin>`
+
+Use Dire Wolf first when bringing up unfamiliar hardware. Use native `afsk`
+after audio device selection and PTT wiring are known.
 
 ## Example
 
@@ -52,7 +57,8 @@ selection jumpers.
 
 For `pyBulletin`, treat it as:
 
-- mode: `afsk`
+- recommended first mode: `kiss_tcp` through Dire Wolf
+- native/lab mode: `afsk`
 - audio path: USB soundcard
 - control path: likely `cm108:/dev/hidrawN:<pin>` when HID GPIO is used
 
@@ -67,7 +73,8 @@ using a `CM119B` or `CM108B` USB audio codec.
 
 For `pyBulletin`, treat it as:
 
-- mode: `afsk`
+- recommended first mode: `kiss_tcp` through Dire Wolf
+- native/lab mode: `afsk`
 - audio path: USB soundcard
 - control path: usually still documented under the CM108/119 USB-interface
   family, but actual board wiring may expose relay-driven PTT/COS behavior
@@ -84,7 +91,8 @@ for radio audio and PTT.
 
 For `pyBulletin`, treat it as:
 
-- mode: `afsk`
+- recommended first mode: `kiss_tcp` through Dire Wolf
+- native/lab mode: `afsk`
 - audio path: USB soundcard
 - control path: `cm108:/dev/hidrawN:<pin>` if the HID GPIO line is exposed
 

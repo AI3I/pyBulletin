@@ -88,6 +88,8 @@ class KissConfig:
     # KISS over TCP (Dire Wolf, soundmodem, etc.)
     tcp_host: str = ""
     tcp_port: int = 8001
+    # Default outbound KISS port/channel for beacons and local-originated UI.
+    default_port: int = 0
     # Commands sent to a hardware TNC before switching to KISS mode.
     # Kantronics KPC-3/9612: ["INTFACE KISS", "RESET"]
     # TAPR TNC-2 / MFJ:      ["KISS ON"]
@@ -105,6 +107,8 @@ class AfskConfig:
     output_device: str = ""
     # Bell 202 defaults for 1200-baud VHF/UHF packet.
     sample_rate: int = 48000
+    # Logical RF channel/port label reported to the AX.25 router.
+    port: int = 0
     mark_hz: int = 1200
     space_hz: int = 2200
     baud: int = 1200
@@ -120,6 +124,8 @@ class BeaconConfig:
     # {node_call} and {version} are substituted at runtime
     text: str = "pyBulletin BBS {node_call} - {version}"
     interval_seconds: int = 600
+    # KISS/AFSK logical port/channel for outbound beacons.
+    port: int = 0
     # Digipeater path, e.g. "WIDE1-1" or "" for no digipeat
     path: str = ""
 
@@ -293,6 +299,8 @@ def _build_kiss(d: dict) -> KissConfig:
         object.__setattr__(c, "tcp_host", str(d["tcp_host"]))
     if "tcp_port" in d:
         object.__setattr__(c, "tcp_port", int(d["tcp_port"]))
+    if "default_port" in d:
+        object.__setattr__(c, "default_port", int(d["default_port"]))
     if "init_cmds" in d:
         object.__setattr__(c, "init_cmds", [str(x) for x in d["init_cmds"]])
     if "init_delay_ms" in d:
@@ -308,7 +316,7 @@ def _build_afsk(d: dict) -> AfskConfig:
     for k in ("input_device", "output_device", "ptt_device"):
         if k in d:
             object.__setattr__(c, k, str(d[k]))
-    for k in ("sample_rate", "mark_hz", "space_hz", "baud"):
+    for k in ("sample_rate", "port", "mark_hz", "space_hz", "baud"):
         if k in d:
             object.__setattr__(c, k, int(d[k]))
     return c
@@ -322,6 +330,8 @@ def _build_beacon(d: dict) -> BeaconConfig:
         object.__setattr__(c, "text", str(d["text"]))
     if "interval_seconds" in d:
         object.__setattr__(c, "interval_seconds", int(d["interval_seconds"]))
+    if "port" in d:
+        object.__setattr__(c, "port", int(d["port"]))
     if "path" in d:
         object.__setattr__(c, "path", str(d["path"]))
     return c

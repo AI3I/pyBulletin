@@ -61,6 +61,7 @@ paclen = 236      # maximum AX.25 packet payload bytes
 # KISS over TCP (Dire Wolf, soundmodem, etc.) — leave tcp_host empty to disable
 tcp_host = ""
 tcp_port = 8001
+default_port = 0  # Dire Wolf / KISS channel for local-originated UI frames
 
 [afsk]
 # Direct Bell 202 modem over USB soundcard / audio interface.
@@ -69,6 +70,7 @@ tcp_port = 8001
 input_device  = ""
 output_device = ""
 sample_rate   = 48000
+port          = 0
 mark_hz       = 1200
 space_hz      = 2200
 baud          = 1200
@@ -79,7 +81,16 @@ dcd_enabled   = true
 enabled          = false
 text             = "pyBulletin BBS {node_call} - {version}"
 interval_seconds = 600
+port             = 0
 path             = ""   # digipeater path, e.g. "WIDE1-1"
+
+[pactor]
+# SCS PTC / Dragon HOST-mode serial support.
+# HOST frame plumbing is implemented; BBS session bridging still needs hardware validation.
+enabled = false
+device  = ""
+baud    = 115200
+paclen  = 250
 
 [rate_limit]
 max_connections_per_ip              = 5

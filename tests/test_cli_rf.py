@@ -64,3 +64,29 @@ def test_config_validation_accepts_disabled_transport():
     cfg = _cfg_with_transport("disabled")
 
     assert _config_issues(cfg) == []
+
+
+def test_config_validation_rejects_bad_afsk_port():
+    cfg = _cfg_with_transport("afsk")
+    cfg.afsk.port = 16
+
+    assert "[afsk].port must be between 0 and 15" in _config_issues(cfg)
+
+
+def test_config_validation_rejects_bad_beacon_port():
+    cfg = _cfg_with_transport("disabled")
+    cfg.beacon.port = -1
+
+    assert "[beacon].port must be between 0 and 15" in _config_issues(cfg)
+
+
+def test_config_validation_rejects_bad_pactor_config_when_enabled():
+    cfg = _cfg_with_transport("disabled")
+    cfg.pactor.enabled = True
+    cfg.pactor.device = ""
+    cfg.pactor.paclen = 300
+
+    issues = _config_issues(cfg)
+
+    assert "[pactor].device is required when PACTOR is enabled" in issues
+    assert "[pactor].paclen must be between 1 and 255" in issues

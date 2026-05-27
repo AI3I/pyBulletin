@@ -311,6 +311,7 @@ TCP KISS (Dire Wolf, soundmodem):
 transport = "kiss_tcp"
 tcp_host = "127.0.0.1"
 tcp_port = 8001
+default_port = 0
 ```
 
 ### `[afsk]`
@@ -322,6 +323,7 @@ Direct Bell 202 AFSK modem path for USB soundcard-style interfaces.
 input_device  = ""
 output_device = ""
 sample_rate   = 48000
+port          = 0
 mark_hz       = 1200
 space_hz      = 2200
 baud          = 1200
@@ -330,6 +332,12 @@ dcd_enabled   = true
 ```
 
 Select it with `transport = "afsk"` in `[kiss]`.
+
+For multi-channel Dire Wolf setups, `[kiss].default_port` is the logical KISS
+channel used for local-originated UI frames. Incoming connected sessions reply
+on the channel where the remote station was heard. For native AFSK,
+`[afsk].port` labels the single soundcard channel in heard-station and router
+state.
 
 Current status:
 - RX and TX Bell 202 audio paths are implemented for mono 16-bit soundcard I/O via `sounddevice`
@@ -341,6 +349,8 @@ Current status:
 
 Common interface patterns:
 - Kits4Hams SHARI Pi3V and similar Pi-mounted radio nodes: start with Dire Wolf as a TCP KISS modem, then use native `afsk` only for direct modem validation
+- DINAH, PAUL, Masters RA/DRA, URI/RIM, and modified CM108/CM119 fobs: start with Dire Wolf, then native `afsk` with `cm108:/dev/hidrawN:<pin>` where HID GPIO PTT is exposed
+- DigiRig Mobile and similar USB audio/serial interfaces: start with Dire Wolf, then native `afsk` with VOX, `serial_rts:/dev/ttyUSB0`, or external PTT as appropriate
 - SHARI native `afsk`: soundcard I/O plus `gpio:<bcm_pin>` or `gpiochip:/dev/gpiochip0:<line>` if PTT is wired to GPIO
 - Masters Communications, DMK URI/RIM, and many CM108/119-based USB interfaces: soundcard I/O plus `cm108:/dev/hidrawN:<gpio_pin>`
 - modified generic CM108/CM119 USB fobs belong in that same CM108/119 `hidraw` bucket
@@ -351,6 +361,7 @@ Common interface patterns:
 
 Full hardware matrix and setup notes:
 - [Hardware Guide](/home/jdlewis/GitHub/pyBulletin/docs/hardware.md)
+- [External Radio Interface Families](/home/jdlewis/GitHub/pyBulletin/docs/hardware/external-interface-families.md)
 - [Raspberry Pi 3B+ + SHARI Pi3V + Dire Wolf](/home/jdlewis/GitHub/pyBulletin/docs/hardware/direwolf-shari-pi.md)
 
 Examples:
@@ -382,6 +393,7 @@ Diagnostics:
 ```bash
 pybulletin --config config/pybulletin.local.toml doctor-afsk
 pybulletin --config config/pybulletin.local.toml doctor-rf
+pybulletin --config config/pybulletin.local.toml doctor-pactor
 pybulletin --config config/pybulletin.local.toml validate-config
 pybulletin --config config/pybulletin.local.toml test-ptt --duration 0.5
 ```
@@ -416,6 +428,20 @@ bulletin_days      = 14
 nts_days           = 7
 killed_days        = 1
 ```
+
+### `[pactor]`
+
+```toml
+[pactor]
+enabled = false
+device  = "/dev/ttyUSB1"
+baud    = 115200
+paclen  = 250
+```
+
+PACTOR support targets SCS PTC / Dragon HOST-mode modems. HOST frame
+encode/decode and serial reconnect plumbing are implemented; full BBS session
+bridging still requires validation against physical SCS hardware.
 
 ### `[web]` — Sysop console
 

@@ -70,5 +70,6 @@ class BeaconTask:
             dest=_BEACON_DEST,
             info=text.encode("ascii", errors="replace"),
             via=via,
+            port=cfg_beacon.port,
         )
         LOG.debug("beacon: sent — %s", text)

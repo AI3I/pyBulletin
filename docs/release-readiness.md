@@ -16,6 +16,8 @@ These areas are ready for normal VPS or LAN deployment:
 - Dire Wolf / soundmodem style TCP KISS integration
 - fail2ban filters for core and web authentication failures
 - install, upgrade, repair, uninstall, doctor, and nginx helper scripts
+- optional nginx admin allowlist/basic-auth generation
+- static web UI smoke checks for referenced IDs and assets
 - SYSOP bootstrap login flow
 
 ## Recommended First RF Path
@@ -47,6 +49,7 @@ The native `afsk` transport is implemented enough for lab testing:
 - Bell 202 RX/TX audio path
 - HDLC / AX.25 framing
 - serial RTS, GPIO, gpiochip, and CM108/CM119 PTT selectors
+- logical channel/port labeling for native AFSK heard-station/router state
 - deployment and doctor checks
 
 It still needs:
@@ -90,7 +93,5 @@ conservative.
 Good next engineering targets:
 
 - native AFSK noisy-channel hardening
-- automated smoke tests for the static web UI
-- optional nginx admin-access policy generation
-- PACTOR HOST-mode implementation if that becomes a release goal
+- PACTOR BBS session bridging after SCS hardware validation
 - packaged release notes and version tags for each public ship point

@@ -162,6 +162,7 @@ The `pybulletin` console command also has operational helpers:
 | `pybulletin --config PATH doctor` | Prints local config and listener summary. |
 | `pybulletin --config PATH doctor-rf` | Checks userspace RF readiness, including KISS serial/TCP and AFSK configuration. |
 | `pybulletin --config PATH doctor-afsk` | Checks native Bell 202 soundcard/PTT support and device selectors. |
+| `pybulletin --config PATH doctor-pactor` | Checks PACTOR HOST-mode serial configuration and dependency availability. |
 | `pybulletin --config PATH validate-config` | Validates configuration and exits non-zero on errors. |
 | `pybulletin --config PATH test-ptt` | Keys the configured AFSK PTT briefly and releases it. |
 | `pybulletin --config PATH run-forward` | Runs one outbound forwarding cycle. |

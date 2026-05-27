@@ -475,13 +475,14 @@ class AfskBell202Link:
         )
 
         LOG.info(
-            "afsk: Bell 202 modem active input=%r output=%r sample_rate=%d baud=%d mark=%d space=%d ptt=%r",
+            "afsk: Bell 202 modem active input=%r output=%r sample_rate=%d baud=%d mark=%d space=%d port=%d ptt=%r",
             self._cfg.input_device or "<default>",
             self._cfg.output_device or "<default>",
             self._cfg.sample_rate,
             self._cfg.baud,
             self._cfg.mark_hz,
             self._cfg.space_hz,
+            self._cfg.port,
             self._cfg.ptt_device or "<none>",
         )
 
@@ -563,13 +564,14 @@ class AfskBell202Link:
                 output_device_index=output_index,
             )
             LOG.info(
-                "afsk: Bell 202 modem active via PyAudio input=%r output=%r sample_rate=%d baud=%d mark=%d space=%d ptt=%r",
+                "afsk: Bell 202 modem active via PyAudio input=%r output=%r sample_rate=%d baud=%d mark=%d space=%d port=%d ptt=%r",
                 self._cfg.input_device or "<default>",
                 self._cfg.output_device or "<default>",
                 self._cfg.sample_rate,
                 self._cfg.baud,
                 self._cfg.mark_hz,
                 self._cfg.space_hz,
+                self._cfg.port,
                 self._cfg.ptt_device or "<none>",
             )
             tx_task = asyncio.create_task(
@@ -612,8 +614,9 @@ class AfskBell202Link:
         from ..ax25.frame import AX25Frame
         try:
             frame = AX25Frame.decode(payload)
-            LOG.debug("afsk: RX port=%d %s", port, frame)
-            await self._router.handle_frame(frame, port)
+            rx_port = self._cfg.port
+            LOG.debug("afsk: RX port=%d %s", rx_port, frame)
+            await self._router.handle_frame(frame, rx_port)
         except Exception as exc:
             LOG.debug("afsk: frame decode error: %s", exc)
 
@@ -771,6 +774,7 @@ def afsk_diagnostics(cfg: AfskConfig) -> list[str]:
         f"transport        : afsk",
         f"sample_rate      : {cfg.sample_rate}",
         f"baud             : {cfg.baud}",
+        f"port             : {cfg.port}",
         f"mark/space       : {cfg.mark_hz}/{cfg.space_hz}",
         f"input_device     : {cfg.input_device or '<default>'}",
         f"output_device    : {cfg.output_device or '<default>'}",

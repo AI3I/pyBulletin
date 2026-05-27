@@ -11,6 +11,7 @@ from pybulletin.ax25.frame import (
     PID_NO_L3, _CTRL_UI, _CTRL_SABM, _CTRL_UA, _CTRL_DISC, _CTRL_DM,
 )
 from pybulletin.ax25.connection import AX25Connection, ConnState
+from pybulletin.ax25.router import AX25Router
 from pybulletin.transport.kiss import encode, decode_stream, encode_cmd
 
 
@@ -213,6 +214,32 @@ def test_kiss_encode_cmd():
     assert frame[0] == 0xC0
     assert frame[-1] == 0xC0
     assert frame[2] == 20
+
+
+async def test_router_send_ui_uses_configured_default_port(cfg, store, strings):
+    sent = []
+    cfg.kiss.default_port = 3
+
+    async def _send(frame, port):
+        sent.append((frame, port))
+
+    router = AX25Router(cfg, store, strings, _send)
+    await router.send_ui("CQ", b"beacon")
+
+    assert sent[0][1] == 3
+
+
+async def test_router_send_ui_allows_explicit_port_override(cfg, store, strings):
+    sent = []
+    cfg.kiss.default_port = 3
+
+    async def _send(frame, port):
+        sent.append((frame, port))
+
+    router = AX25Router(cfg, store, strings, _send)
+    await router.send_ui("CQ", b"beacon", port=1)
+
+    assert sent[0][1] == 1
 
 
 # ---------------------------------------------------------------------------

@@ -12,8 +12,9 @@ The key distinction is:
 
 | Family | Examples | pyBulletin mode | Audio path | PTT / control path | Notes |
 |---|---|---|---|---|---|
-| CM108/CM119 USB radio interfaces | modified CM108/CM119 USB fobs, DMK `URI`, `URIx`, Repeater Builder `RIM-Lite`, Masters `RA-25/33/35/40/42`, `RA-DR1X`, Kits4Hams `DINAH`, Kits4Hams `PAUL` | `afsk` | USB soundcard | `cm108:/dev/hidrawN:<pin>` | Best fit for native AFSK when the board exposes C-Media HID GPIO |
+| CM108/CM119 USB radio interfaces | modified CM108/CM119 USB fobs, DMK `URI`, `URIx`, Repeater Builder `RIM-Lite`, Masters `RA-25/33/35/40/42`, `RA-DR1X`, Kits4Hams `DINAH`, Kits4Hams `PAUL` | recommended: `kiss_tcp` with Dire Wolf; native/lab: `afsk` | USB soundcard | Dire Wolf or `cm108:/dev/hidrawN:<pin>` | Best fit for native AFSK when the board exposes C-Media HID GPIO |
 | Generic USB soundcard interfaces | `SignaLink USB`, generic C-Media or similar USB audio dongles | `afsk` | USB soundcard | VOX, none, `serial_rts:...`, or external GPIO | Good fit when the interface is just audio and PTT is handled elsewhere |
+| USB audio plus serial/CAT/PTT interfaces | `DigiRig Mobile` and similar | recommended: `kiss_tcp` with Dire Wolf; native/lab: `afsk` | USB soundcard | Dire Wolf, `serial_rts:...`, VOX, or external control | Treat by the Linux devices exposed by the interface |
 | Pi codec / radio HATs | NW Digital Radio `UDRC`, `DRAWS` | `afsk` | ALSA / I2S codec | `gpio:<bcm_pin>` or `gpiochip:...` | These are soundcard-style interfaces, not CM108 HID devices |
 | Integrated Pi radio boards | Kits4Hams `SHARI`, Kits4Hams `BRIAN` | recommended: `kiss_tcp` with Dire Wolf; native/lab: `afsk` | board audio path | Dire Wolf or board-specific GPIO/control | Requires radio/audio-level tuning in addition to software setup |
 | Legacy / specialty host interfaces | Quad Radio PCI and similar host-attached radio cards | likely `afsk` | host audio / board-specific | board-specific | Mentioned for scope; not specifically validated in-tree yet |
@@ -48,6 +49,7 @@ ptt_device    = "cm108:/dev/hidraw0:3"
 
 Detailed recipe:
 - [CM108 / CM119 Interfaces](/home/jdlewis/GitHub/pyBulletin/docs/hardware/cm108-interfaces.md)
+- [External Radio Interface Families](hardware/external-interface-families.md)
 
 ### Generic USB Soundcards
 
