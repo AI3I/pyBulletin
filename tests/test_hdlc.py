@@ -142,6 +142,34 @@ def test_bell202_modulator_demodulator_roundtrip():
     assert payload in decoded
 
 
+def test_bell202_demodulator_tolerates_dc_offset():
+    payload = AX25Frame.ui(
+        dest=AX25Address("APBBS"),
+        src=AX25Address("N0CALL"),
+        info=b"dc-offset",
+    ).encode()
+    mod = Bell202Modulator(
+        sample_rate=48000,
+        baud=1200,
+        mark_hz=1200,
+        space_hz=2200,
+        preamble_flags=24,
+        postamble_flags=3,
+    )
+    demod = Bell202Demodulator(
+        sample_rate=48000,
+        baud=1200,
+        mark_hz=1200,
+        space_hz=2200,
+    )
+    samples = [
+        max(-1.0, min(1.0, (sample / 32768.0) + 0.18))
+        for sample in array_from_pcm16le(mod.modulate_ax25_frame(payload))
+    ]
+    decoded = demod.feed_samples(samples)
+    assert payload in decoded
+
+
 def test_build_afsk_config():
     cfg = _build_afsk({
         "input_device": "hw:1,0",

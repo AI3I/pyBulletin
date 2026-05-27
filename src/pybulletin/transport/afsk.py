@@ -99,9 +99,18 @@ class Bell202Demodulator:
         return n
 
     def _classify_symbol(self, window: list[float]) -> int:
+        window = self._remove_dc_offset(window)
         mark = self._goertzel_power(window, self._mark_hz)
         space = self._goertzel_power(window, self._space_hz)
         return 1 if mark >= space else 0
+
+    def _remove_dc_offset(self, window: list[float]) -> list[float]:
+        if not window:
+            return window
+        mean = sum(window) / len(window)
+        if abs(mean) < 1e-9:
+            return window
+        return [sample - mean for sample in window]
 
     def _goertzel_power(self, window: list[float], freq_hz: int) -> float:
         if not window:
