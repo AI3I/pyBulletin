@@ -389,10 +389,14 @@ async function loadConfRooms() {
   if (rooms.length === 0) { el.innerHTML = '<p class="subtle" style="margin:0">There are no active rooms.</p>'; return; }
   let html = '<table class="data-table" style="margin-top:.25rem"><thead><tr><th>Room</th><th>Members</th></tr></thead><tbody>';
   for (const [name, r] of rooms.sort()) {
-    html += `<tr><td><a href="#" onclick="event.preventDefault();document.getElementById('conf-room').value='${escHtml(name)}'">${escHtml(name)}</a></td><td>${r.members.map(escHtml).join(", ")}</td></tr>`;
+    html += `<tr><td><a href="#" data-room="${escHtml(name)}">${escHtml(name)}</a></td><td>${r.members.map(escHtml).join(", ")}</td></tr>`;
   }
   html += "</tbody></table>";
   el.innerHTML = html;
+  el.querySelectorAll("a[data-room]").forEach(a => a.addEventListener("click", e => {
+    e.preventDefault();
+    document.getElementById("conf-room").value = a.dataset.room;
+  }));
 }
 
 function confJoin() {
