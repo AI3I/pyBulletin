@@ -12,6 +12,7 @@ These areas are ready for normal VPS or LAN deployment:
 - Telnet user access
 - SQLite store and retention timer
 - FBB ASCII forwarding between pyBulletin nodes
+- FBB compressed B0 forwarding with LinBPQ over TCP in the local lab
 - KISS serial and KISS TCP configuration paths
 - Dire Wolf / soundmodem style TCP KISS integration
 - fail2ban filters for core and web authentication failures
@@ -43,10 +44,11 @@ These need real hardware time before they should be called production-proven:
 - recovery after audio device disappearance or Dire Wolf restart
 
 The repeatable BPQ/RF exchange and recovery checklist is in
-[Forwarding Validation](forwarding-validation.md). BPQ interoperability remains
-unverified on physical or live BPQ nodes until that checklist is completed.
-Compressed B1/B2 forwarding is not advertised in the SID; its helper routines
-are not part of the active forwarding path.
+[Forwarding Validation](forwarding-validation.md). A local LinBPQ 6.0.26.1
+instance has exchanged compressed B0 messages in both directions, including a
+multi-block bulletin. Physical RF paths, LinFBB, and unattended recovery remain
+unverified. B1/B2 forwarding is not advertised in the SID; B1 resume is not
+implemented in the active forwarding path.
 
 ## Native AFSK Status
 
