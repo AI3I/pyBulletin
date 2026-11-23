@@ -41,7 +41,7 @@ KEEP_DATA=0 KEEP_CONFIG=0 sudo -E bash deploy/uninstall.sh
 |------|---------|
 | `pybulletin.service` | Core BBS service: Telnet, RF transports, inbound B2F forwarding, and forwarding scheduler. |
 | `pybulletinweb.service` | Web service: public BBS UI, sysop console, JSON API, and WebSocket endpoint. |
-| `pybulletin-forward.service` / `.timer` | One-shot scheduled forwarding helper. |
+| `pybulletin-forward.service` / `.timer` | Legacy one-shot TCP helper; disabled by default because the core service schedules TCP and AX.25 forwarding. |
 | `pybulletin-retention.service` / `.timer` | One-shot message retention cleanup helper. |
 
 The old `pybulletin-web.service` name is obsolete. Install, upgrade, and repair

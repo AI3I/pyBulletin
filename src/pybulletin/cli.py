@@ -64,12 +64,14 @@ async def _serve_core(config_path: str) -> None:
     store   = BBSStore(cfg.store.sqlite_path)
     strings = StringCatalog("config/strings.toml")
     conf_hub = ConferenceHubManager()
+    router = None
 
     # --- Telnet / TCP transport ---
     async def _session_handler(reader, writer, meta):
         session = BBSSession(
             reader, writer, meta, cfg, store, strings,
             conference_hub=conf_hub,
+            router=router,
         )
         await session.run()
 
@@ -96,27 +98,31 @@ async def _serve_core(config_path: str) -> None:
     # --- B2F inbound forward listener ---
     fwd_server = None
     if cfg.forward.enabled and cfg.forward.listen_port:
-        from .forward.session import ForwardSession
+        from .forward.session import ForwardSession, inbound_neighbor, _WireReader
         from .forward.sid import parse as parse_sid
-        from .config import ForwardNeighborConfig
+        from .forward.sid import generate as gen_sid
 
         async def _forward_handler(reader, writer):
             peer = writer.get_extra_info("peername", ("?", 0))
             LOG.info("forward: inbound connection from %s:%s", *peer)
+            writer.write((gen_sid(cfg.node.node_call) + "\r>\r").encode("ascii"))
+            await writer.drain()
+            wire_reader = _WireReader(reader)
             try:
-                sid_line = await asyncio.wait_for(reader.readline(), timeout=15.0)
+                sid_line = await asyncio.wait_for(wire_reader.readline(), timeout=15.0)
             except asyncio.TimeoutError:
                 writer.close()
                 return
             sid_str = sid_line.decode("ascii", errors="replace").strip()
             remote_sid = parse_sid(sid_str)
-            remote_call = (remote_sid.call if remote_sid else "").upper()
-
-            neighbor = next(
-                (n for n in cfg.forward.neighbors
-                 if n.call.upper() == remote_call and n.enabled),
-                ForwardNeighborConfig(call=remote_call or "UNKNOWN"),
-            )
+            remote_call = (f"{remote_sid.call}-{remote_sid.ssid}" if remote_sid and remote_sid.ssid
+                           else remote_sid.call if remote_sid else "").upper()
+            neighbor = inbound_neighbor(cfg.forward, remote_call, peer[0])
+            if neighbor is None:
+                LOG.warning("forward: rejected unconfigured peer %s from %s", remote_call or "UNKNOWN", peer)
+                writer.close()
+                await writer.wait_closed()
+                return
 
             # Shim: replay the already-read SID line before the live reader
             class _PrefixedReader:
@@ -134,18 +140,12 @@ async def _serve_core(config_path: str) -> None:
                     return self_inner._inner.at_eof()
 
             sess = ForwardSession(cfg, store, neighbor)
-            sess._reader = _PrefixedReader(sid_line, reader)
-            sess._writer = writer
             try:
-                await sess._run(caller=False)
+                sent, received = await sess.run_incoming(_PrefixedReader(sid_line, wire_reader), writer, greeted=True)
+                await store.record_forward_result(neighbor.call, sent=sent, received=received)
             except Exception as exc:
+                await store.record_forward_result(neighbor.call, error=str(exc))
                 LOG.warning("forward: inbound session error: %s", exc)
-            finally:
-                try:
-                    writer.close()
-                    await writer.wait_closed()
-                except Exception:
-                    pass
 
         fwd_server = await asyncio.start_server(
             _forward_handler,
@@ -218,7 +218,7 @@ async def _serve_core(config_path: str) -> None:
     if cfg.forward.enabled:
         from .forward.scheduler import ForwardScheduler
 
-        fwd_scheduler = ForwardScheduler(cfg, store)
+        fwd_scheduler = ForwardScheduler(cfg, store, router if ax25_link else None)
 
         async def _fwd_loop():
             import time as _time
@@ -590,12 +590,14 @@ async def _serve(config_path: str) -> None:
         asyncio.get_event_loop().create_task(_conf_broadcast())
 
     conf_hub.set_state_change_callback(_on_conf_change)
+    router = None
 
     # --- Telnet / TCP transport ---
     async def _session_handler(reader, writer, meta):
         session = BBSSession(
             reader, writer, meta, cfg, store, strings,
             conference_hub=conf_hub,
+            router=router,
         )
         await session.run()
 
@@ -620,26 +622,31 @@ async def _serve(config_path: str) -> None:
     # --- B2F inbound forward listener ---
     fwd_server = None
     if cfg.forward.enabled and cfg.forward.listen_port:
-        from .forward.session import ForwardSession
+        from .forward.session import ForwardSession, inbound_neighbor, _WireReader
         from .forward.sid import parse as parse_sid
-        from .config import ForwardNeighborConfig
+        from .forward.sid import generate as gen_sid
 
         async def _forward_handler(reader, writer):
             peer = writer.get_extra_info("peername", ("?", 0))
             LOG.info("forward: inbound connection from %s:%s", *peer)
+            writer.write((gen_sid(cfg.node.node_call) + "\r>\r").encode("ascii"))
+            await writer.drain()
+            wire_reader = _WireReader(reader)
             try:
-                sid_line = await asyncio.wait_for(reader.readline(), timeout=15.0)
+                sid_line = await asyncio.wait_for(wire_reader.readline(), timeout=15.0)
             except asyncio.TimeoutError:
                 writer.close()
                 return
             sid_str = sid_line.decode("ascii", errors="replace").strip()
             remote_sid = parse_sid(sid_str)
-            remote_call = (remote_sid.call if remote_sid else "").upper()
-            neighbor = next(
-                (n for n in cfg.forward.neighbors
-                 if n.call.upper() == remote_call and n.enabled),
-                ForwardNeighborConfig(call=remote_call or "UNKNOWN"),
-            )
+            remote_call = (f"{remote_sid.call}-{remote_sid.ssid}" if remote_sid and remote_sid.ssid
+                           else remote_sid.call if remote_sid else "").upper()
+            neighbor = inbound_neighbor(cfg.forward, remote_call, peer[0])
+            if neighbor is None:
+                LOG.warning("forward: rejected unconfigured peer %s from %s", remote_call or "UNKNOWN", peer)
+                writer.close()
+                await writer.wait_closed()
+                return
 
             class _PrefixedReader:
                 def __init__(self, prefix, inner):
@@ -656,18 +663,12 @@ async def _serve(config_path: str) -> None:
                     return self_inner._inner.at_eof()
 
             sess = ForwardSession(cfg, store, neighbor)
-            sess._reader = _PrefixedReader(sid_line, reader)
-            sess._writer = writer
             try:
-                await sess._run(caller=False)
+                sent, received = await sess.run_incoming(_PrefixedReader(sid_line, wire_reader), writer, greeted=True)
+                await store.record_forward_result(neighbor.call, sent=sent, received=received)
             except Exception as exc:
+                await store.record_forward_result(neighbor.call, error=str(exc))
                 LOG.warning("forward: inbound session error: %s", exc)
-            finally:
-                try:
-                    writer.close()
-                    await writer.wait_closed()
-                except Exception:
-                    pass
 
         fwd_server = await asyncio.start_server(
             _forward_handler, cfg.forward.listen_host, cfg.forward.listen_port,
@@ -733,7 +734,7 @@ async def _serve(config_path: str) -> None:
     if cfg.forward.enabled:
         from .forward.scheduler import ForwardScheduler
 
-        fwd_scheduler = ForwardScheduler(cfg, store)
+        fwd_scheduler = ForwardScheduler(cfg, store, router if ax25_link else None)
 
         async def _fwd_loop():
             # Align to the next whole minute, then tick every 60 s — mirrors cron.

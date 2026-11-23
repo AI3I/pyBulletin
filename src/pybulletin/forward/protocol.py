@@ -104,6 +104,8 @@ class Proposal:
     size:     int
     date:     str = ""
     subject:  str = ""
+    at_bbs:   str = ""
+    msg_type: str = MSG_PRIVATE
     # Set after the remote responds to our proposal
     accepted: bool = False
 

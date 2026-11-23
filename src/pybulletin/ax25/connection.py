@@ -120,13 +120,16 @@ class AX25Connection:
 
     async def wait_connected(self) -> bool:
         """Wait until connected or disconnected. Returns True if connected."""
-        done, _ = await asyncio.wait(
-            [
-                asyncio.ensure_future(self._connected_event.wait()),
-                asyncio.ensure_future(self._disconnected_event.wait()),
-            ],
-            return_when=asyncio.FIRST_COMPLETED,
-        )
+        tasks = [
+            asyncio.create_task(self._connected_event.wait()),
+            asyncio.create_task(self._disconnected_event.wait()),
+        ]
+        try:
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
         return self._state == ConnState.CONNECTED
 
     async def connect(self) -> bool:
@@ -138,7 +141,8 @@ class AX25Connection:
         await self._send(AX25Frame.sabm(
             self._make_dest(), self._make_src()
         ))
-        self._start_t1()
+        if self._state == ConnState.AWAITING_CONNECT:
+            self._start_t1()
         return await self.wait_connected()
 
     async def disconnect(self) -> None:
@@ -151,7 +155,8 @@ class AX25Connection:
         await self._send(AX25Frame.disc(
             self._make_dest(), self._make_src()
         ))
-        self._start_t1()
+        if self._state == ConnState.AWAITING_RELEASE:
+            self._start_t1()
 
     async def write(self, data: bytes) -> None:
         """Queue *data* for transmission as I frame(s)."""

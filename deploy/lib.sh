@@ -378,7 +378,9 @@ restart_web_service_hard() {
 enable_service() {
   systemctl enable "$PYBULLETIN_SERVICE_NAME" >/dev/null
   systemctl enable "$PYBULLETIN_WEB_SERVICE_NAME" >/dev/null
-  systemctl enable --now "$PYBULLETIN_FORWARD_TIMER_NAME"   >/dev/null
+  # Core service owns the minute-level scheduler and its AX.25 router.
+  # The legacy one-shot timer would start concurrent TCP-only sessions.
+  systemctl disable --now "$PYBULLETIN_FORWARD_TIMER_NAME" >/dev/null 2>&1 || true
   systemctl enable --now "$PYBULLETIN_RETENTION_TIMER_NAME" >/dev/null
 }
 

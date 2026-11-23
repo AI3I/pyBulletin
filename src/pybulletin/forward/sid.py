@@ -1,42 +1,7 @@
-"""FBB System Identification (SID) string parsing and generation.
+"""FBB System Identification (SID) parsing and generation.
 
-The SID is the first thing exchanged when two FBB nodes connect.
-Format::
-
-    [CALL-SSID-SOFTWARE-FLAGS$]
-
-Examples::
-
-    [W3BBS-5-FBB5.15-B2FHIM$]          FBB (F6FBB / LinFBB)
-    [AI3I-1-pyBulletin0.1-B2FHM$]      pyBulletin
-    [KD8JQ-1-BPQ6.0.22-B2FHM$]         BPQ32 (G8BPQ)
-    [W2TKE-1-JNOS2.0m-B2FHM$]          JNOS
-    [VE7VV-1-Airmail3.4.062-B2FHM$]    Winlink / Airmail
-    [KA1BBS-WL2K4.1-B2FHM$]            Winlink 2000
-
-Capability flags (relevant subset):
-    B — supports B2 binary forwarding
-    2 — supports B2F enhanced binary (implies B)
-    F — FBB-compatible forwarding
-    H — hierarchical bulletin addressing
-    I — Internet News Node
-    M — message notification
-    $ — mandatory end marker (not really a flag)
-
-We advertise: B2FHM  (B2F binary, FBB compat, hierarchical, message notify)
-
-BPQ / JNOS / Kantronics interoperability notes
------------------------------------------------
-BPQ32 (G8BPQ) and JNOS follow the standard SID format and parse cleanly.
-Both advertise ``B2FHM$`` so full B2F forwarding works.
-
-Kantronics KPC-3/9612 built-in PBBS uses a non-standard SID like
-``[KA1BBS-KPC-3v8.3-BF$]`` (dashes in the software field break the
-FBB field grammar).  When ``parse()`` returns ``None``, the session
-falls back to B1 forwarding, which the KPC PBBS also supports.
-
-Winlink/Airmail nodes typically advertise ``B2FHM$`` and interoperate
-fully over B2F.
+The active forwarding session implements FBB ASCII and advertises FH only.
+Binary helpers remain experimental and are not advertised to peers.
 """
 from __future__ import annotations
 
@@ -45,8 +10,8 @@ from dataclasses import dataclass, field
 
 from .. import __version__
 
-# Flags we advertise in our SID
-_OUR_FLAGS = "B2FHM"
+# Only advertise the standard FBB ASCII mode implemented by ForwardSession.
+_OUR_FLAGS = "FH"
 
 # Pattern: [CALL(-SSID)?-SOFTWARE-FLAGS$]
 # The regex uses backtracking so that the optional -SSID doesn't greedily

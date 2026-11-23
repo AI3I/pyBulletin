@@ -31,9 +31,10 @@ LOG = logging.getLogger(__name__)
 class ForwardScheduler:
     """Runs one forwarding pass across all configured neighbors."""
 
-    def __init__(self, cfg: AppConfig, store: BBSStore) -> None:
+    def __init__(self, cfg: AppConfig, store: BBSStore, router=None) -> None:
         self._cfg   = cfg
         self._store = store
+        self._router = router
 
     async def run_once(self) -> tuple[int, int]:
         """Check all neighbors and forward to those whose schedule matches now.
@@ -59,14 +60,17 @@ class ForwardScheduler:
                 continue
 
             LOG.info("scheduler: initiating session with %s", neighbor.call)
-            session = ForwardSession(self._cfg, self._store, neighbor)
+            session = ForwardSession(self._cfg, self._store, neighbor, self._router)
             try:
                 sent, received = await session.run_outgoing()
                 total_sent     += sent
                 total_received += received
+                await self._store.record_forward_result(
+                    neighbor.call, sent=sent, received=received)
                 LOG.info("scheduler: %s — sent %d, received %d",
                          neighbor.call, sent, received)
             except Exception as exc:
+                await self._store.record_forward_result(neighbor.call, error=str(exc))
                 LOG.warning("scheduler: session with %s failed: %s",
                             neighbor.call, exc)
 

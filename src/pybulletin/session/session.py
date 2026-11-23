@@ -43,6 +43,7 @@ class BBSSession:
         *,
         heard_provider: Callable[[], list] | None = None,
         conference_hub: ConferenceHub | None = None,
+        router=None,
     ) -> None:
         self._reader          = reader
         self._writer          = writer
@@ -54,6 +55,7 @@ class BBSSession:
         self._channel         = CHANNEL_AX25 if meta.channel == "ax25" else CHANNEL_TELNET
         self._heard_provider  = heard_provider    # () -> list[(dt, call, port)]
         self._conference_hub  = conference_hub
+        self._router = router
 
     # ------------------------------------------------------------------
     # Public entry point

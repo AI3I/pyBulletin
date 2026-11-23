@@ -119,7 +119,7 @@ def test_sid_str_roundtrip():
     sid = SID(call="W3BBS", ssid=5, software="pyBulletin0.1", flags="B2FHM$")
     text = str(sid)
     assert "W3BBS-5" in text
-    assert "B2FHM$" in text
+    assert "FHM$" in text
 
 
 def test_sid_str_no_ssid():
@@ -131,7 +131,7 @@ def test_sid_str_no_ssid():
 def test_generate_sid():
     text = generate("W3BBS-5")
     assert text.startswith("[W3BBS-5-")
-    assert "B2FHM$" in text
+    assert "FH$" in text
     assert text.endswith("]")
 
 

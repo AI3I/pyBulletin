@@ -99,13 +99,15 @@ max_message_body_bytes              = 32768   # 32 KB
 
 [forward]
 enabled = true
+allow_unknown_peers = false  # only enabled, configured neighbors may forward inbound
 
 # Forward neighbors — repeat this block for each neighbor BBS.
 # [[forward.neighbor]]
 # call       = "W3BBS-1"
 # address    = "192.168.1.10:6300"   # host:port for TCP, or AX.25 callsign for RF
-# protocol   = "b2"                  # "b1" or "b2"
+# inbound_host = "192.168.1.10"       # source IP for BPQ SIDs without a callsign
+# protocol   = "ascii"               # FBB ASCII forwarding
 # schedule   = "0 */2 * * *"        # cron expression (UTC) for outbound connects
 # categories = ["WW", "NA", "US"]   # bulletin prefixes to exchange
-# bin_mode   = true
+# bin_mode   = false
 # enabled    = true

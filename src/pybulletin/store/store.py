@@ -20,7 +20,7 @@ LOG = logging.getLogger(__name__)
 
 # Increment this when the schema changes.  The store will run
 # _migrate() automatically on open.
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 
 _SCHEMA_SQL = """
 PRAGMA journal_mode = WAL;
@@ -124,8 +124,17 @@ CREATE TABLE IF NOT EXISTS forward_neighbors (
     msgs_sent       INTEGER NOT NULL DEFAULT 0,
     msgs_received   INTEGER NOT NULL DEFAULT 0,
     session_active  INTEGER NOT NULL DEFAULT 0,
-    enabled         INTEGER NOT NULL DEFAULT 1
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    last_error      TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS forward_delivery (
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    neighbor_call TEXT NOT NULL,
+    delivered_at INTEGER NOT NULL,
+    PRIMARY KEY (message_id, neighbor_call)
+);
+CREATE INDEX IF NOT EXISTS idx_forward_delivery_neighbor ON forward_delivery (neighbor_call);
 
 CREATE TABLE IF NOT EXISTS file_entries (
     filename    TEXT NOT NULL,
@@ -141,6 +150,16 @@ CREATE TABLE IF NOT EXISTS file_entries (
 
 # Migration SQL applied in steps as schema_version increments
 _MIGRATIONS: dict[int, list[str]] = {
+    4: [
+        """CREATE TABLE IF NOT EXISTS forward_delivery (
+            message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            neighbor_call TEXT NOT NULL,
+            delivered_at INTEGER NOT NULL,
+            PRIMARY KEY (message_id, neighbor_call)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_forward_delivery_neighbor ON forward_delivery (neighbor_call)",
+        "ALTER TABLE forward_neighbors ADD COLUMN last_error TEXT NOT NULL DEFAULT ''",
+    ],
     3: [
         # Schema v2 → v3: add sysop edit tracking to messages
         "ALTER TABLE messages ADD COLUMN edited_by TEXT NOT NULL DEFAULT ''",
@@ -526,6 +545,40 @@ class BBSStore:
     async def mark_forwarded(self, msg_id: int) -> bool:
         from .models import STATUS_FORWARDED
         return await self.update_message_status(msg_id, STATUS_FORWARDED)
+
+    async def delivered_message_ids(self, neighbor_call: str) -> set[int]:
+        async with self._lock:
+            rows = self._conn.execute(
+                "SELECT message_id FROM forward_delivery WHERE neighbor_call = ?",
+                (neighbor_call.upper(),),
+            ).fetchall()
+        return {row[0] for row in rows}
+
+    async def mark_delivered(self, msg_id: int, neighbor_call: str) -> None:
+        async with self._lock:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO forward_delivery (message_id, neighbor_call, delivered_at) VALUES (?, ?, ?)",
+                (msg_id, neighbor_call.upper(), int(time.time())),
+            )
+            self._conn.commit()
+
+    async def pending_delivery_counts(self, neighbors: list[Any]) -> dict[str, int]:
+        """Count eligible messages not yet sent to each configured neighbor."""
+        messages = await self.list_messages()
+        result: dict[str, int] = {}
+        for neighbor in neighbors:
+            delivered = await self.delivered_message_ids(neighbor.call)
+            result[neighbor.call.upper()] = sum(
+                1 for msg in messages
+                if msg.id not in delivered and msg.status not in (STATUS_KILLED, "H")
+                and neighbor.call.upper() not in msg.forward_path.upper().split()
+                and (
+                    (msg.msg_type == MSG_PRIVATE and msg.at_bbs.upper() == neighbor.call.upper())
+                    or (msg.msg_type in (MSG_BULLETIN, MSG_NTS)
+                        and any(msg.to_call.upper().startswith(cat.upper()) for cat in neighbor.categories))
+                )
+            )
+        return result
 
     async def append_forward_path(self, msg_id: int, bbs_call: str) -> None:
         async with self._lock:
@@ -944,6 +997,30 @@ class BBSStore:
                     (sent, received, now, call.upper()),
                 )
             self._conn.commit()
+
+    async def record_forward_result(
+        self, call: str, *, sent: int = 0, received: int = 0, error: str = ""
+    ) -> None:
+        now = int(time.time())
+        async with self._lock:
+            self._conn.execute(
+                """INSERT INTO forward_neighbors
+                   (call, last_connect_at, last_success_at, msgs_sent, msgs_received, last_error)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(call) DO UPDATE SET
+                     last_connect_at=excluded.last_connect_at,
+                     last_success_at=CASE WHEN excluded.last_error='' THEN excluded.last_success_at ELSE forward_neighbors.last_success_at END,
+                     msgs_sent=forward_neighbors.msgs_sent+excluded.msgs_sent,
+                     msgs_received=forward_neighbors.msgs_received+excluded.msgs_received,
+                     last_error=excluded.last_error""",
+                (call.upper(), now, now if not error else None, sent, received, error[:500]),
+            )
+            self._conn.commit()
+
+    async def forward_errors(self) -> dict[str, str]:
+        async with self._lock:
+            rows = self._conn.execute("SELECT call, last_error FROM forward_neighbors").fetchall()
+        return {row[0]: row[1] for row in rows}
 
     # ------------------------------------------------------------------
     # Files

@@ -1437,15 +1437,17 @@ class CommandEngine:
         total_sent = total_received = 0
         for neighbor in neighbors:
             await self._s.send(f"\r\n  Forwarding to {neighbor.call} ...\r\n")
-            sess = ForwardSession(self._cfg, self._store, neighbor)
+            sess = ForwardSession(self._cfg, self._store, neighbor, self._s._router)
             try:
                 sent, received = await sess.run_outgoing()
+                await self._store.record_forward_result(neighbor.call, sent=sent, received=received)
                 total_sent     += sent
                 total_received += received
                 await self._s.send(
                     f"  {neighbor.call}: sent {sent}, received {received}\r\n"
                 )
             except Exception as exc:
+                await self._store.record_forward_result(neighbor.call, error=str(exc))
                 await self._s.send(f"  {neighbor.call}: failed — {exc}\r\n")
                 LOG.warning("forward: manual F to %s failed: %s", neighbor.call, exc)
 

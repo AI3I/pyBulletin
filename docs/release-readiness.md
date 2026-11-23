@@ -11,7 +11,7 @@ These areas are ready for normal VPS or LAN deployment:
 - Web/sysop/API service under `pybulletinweb.service`
 - Telnet user access
 - SQLite store and retention timer
-- B1/B2F forwarding helpers
+- FBB ASCII forwarding between pyBulletin nodes
 - KISS serial and KISS TCP configuration paths
 - Dire Wolf / soundmodem style TCP KISS integration
 - fail2ban filters for core and web authentication failures
@@ -41,6 +41,12 @@ These need real hardware time before they should be called production-proven:
 - RF end-to-end connect, login, message read/send, and disconnect
 - RF store-and-forward behavior against a known neighbor
 - recovery after audio device disappearance or Dire Wolf restart
+
+The repeatable BPQ/RF exchange and recovery checklist is in
+[Forwarding Validation](forwarding-validation.md). BPQ interoperability remains
+unverified on physical or live BPQ nodes until that checklist is completed.
+Compressed B1/B2 forwarding is not advertised in the SID; its helper routines
+are not part of the active forwarding path.
 
 ## Native AFSK Status
 

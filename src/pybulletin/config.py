@@ -164,13 +164,15 @@ class ForwardNeighborConfig:
     call: str = ""
     # TCP address as "host:port", or AX.25 callsign for RF connect
     address: str = ""
-    # Forwarding protocol: "b1" or "b2"
-    protocol: str = "b2"
+    # Exact source IP accepted for inbound peers whose SID omits their callsign.
+    inbound_host: str = ""
+    # Active wire format. Legacy b1/b2 values are read but ASCII is used.
+    protocol: str = "ascii"
     # Cron expression for when to initiate forwarding (UTC)
     schedule: str = "0 */2 * * *"
     # Bulletin address prefixes accepted from/sent to this neighbor
     categories: list[str] = field(default_factory=lambda: ["WW"])
-    bin_mode: bool = True
+    bin_mode: bool = False
     enabled: bool = True
 
 
@@ -180,6 +182,7 @@ class ForwardConfig:
     # TCP port to listen on for inbound forwarding connections (0 = disabled)
     listen_port: int = 6301
     listen_host: str = "0.0.0.0"
+    allow_unknown_peers: bool = False
     neighbors: list[ForwardNeighborConfig] = field(default_factory=list)
 
 
@@ -365,6 +368,8 @@ def _build_neighbor(d: dict) -> ForwardNeighborConfig:
         object.__setattr__(c, "call", str(d["call"]).upper())
     if "address" in d:
         object.__setattr__(c, "address", str(d["address"]))
+    if "inbound_host" in d:
+        object.__setattr__(c, "inbound_host", str(d["inbound_host"]))
     if "protocol" in d:
         object.__setattr__(c, "protocol", str(d["protocol"]).lower())
     if "schedule" in d:
@@ -386,6 +391,8 @@ def _build_forward(d: dict) -> ForwardConfig:
         object.__setattr__(c, "listen_port", int(d["listen_port"]))
     if "listen_host" in d:
         object.__setattr__(c, "listen_host", str(d["listen_host"]))
+    if "allow_unknown_peers" in d:
+        object.__setattr__(c, "allow_unknown_peers", bool(d["allow_unknown_peers"]))
     neighbors = [_build_neighbor(n) for n in d.get("neighbor", [])]
     object.__setattr__(c, "neighbors", neighbors)
     return c
@@ -445,7 +452,12 @@ def save_config(config: AppConfig, path: str) -> None:
         existing["node"][k] = getattr(config.node, k)
 
     # Write scalar sections (everything except forward.neighbor which is AoT)
-    fwd_scalars = {"enabled": config.forward.enabled}
+    fwd_scalars = {
+        "enabled": config.forward.enabled,
+        "listen_host": config.forward.listen_host,
+        "listen_port": config.forward.listen_port,
+        "allow_unknown_peers": config.forward.allow_unknown_peers,
+    }
     non_fwd = {k: v for k, v in existing.items() if k != "forward"}
 
     lines = ["# pyBulletin local config overrides — managed by sysop console\n"]
@@ -454,6 +466,9 @@ def save_config(config: AppConfig, path: str) -> None:
     # Forward section header + enabled flag
     lines.append("\n[forward]\n")
     lines.append(f"enabled = {'true' if fwd_scalars['enabled'] else 'false'}\n")
+    lines.append(f'listen_host = "{fwd_scalars["listen_host"]}"\n')
+    lines.append(f'listen_port = {fwd_scalars["listen_port"]}\n')
+    lines.append(f"allow_unknown_peers = {'true' if fwd_scalars['allow_unknown_peers'] else 'false'}\n")
 
     # Forward neighbors as TOML array of tables ([[forward.neighbor]])
     for n in config.forward.neighbors:
@@ -461,6 +476,7 @@ def save_config(config: AppConfig, path: str) -> None:
         lines.append(f'call       = "{n.call}"\n')
         escaped_addr = n.address.replace("\\", "\\\\").replace('"', '\\"')
         lines.append(f'address    = "{escaped_addr}"\n')
+        lines.append(f'inbound_host = "{n.inbound_host}"\n')
         lines.append(f'protocol   = "{n.protocol}"\n')
         lines.append(f'schedule   = "{n.schedule}"\n')
         cats = ", ".join(f'"{c}"' for c in n.categories)

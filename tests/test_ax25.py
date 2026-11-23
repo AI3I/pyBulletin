@@ -15,6 +15,25 @@ from pybulletin.ax25.router import AX25Router
 from pybulletin.transport.kiss import encode, decode_stream, encode_cmd
 
 
+async def test_router_outbound_connection_uses_default_port(cfg, store, strings):
+    cfg.kiss.default_port = 2
+    sent = []
+    router = None
+
+    async def send(frame, port):
+        sent.append((frame.frame_type, port))
+        if frame.frame_type in (FrameType.SABM, FrameType.DISC):
+            await router.handle_frame(AX25Frame.ua(frame.src, frame.dest), port)
+
+    router = AX25Router(cfg, store, strings, send)
+    conn = await asyncio.wait_for(router.connect_outgoing("B1BBB"), 1)
+    assert conn.state == ConnState.CONNECTED
+    assert sent[0] == (FrameType.SABM, 2)
+    await asyncio.wait_for(router.close_outgoing(conn), 1)
+    assert (FrameType.DISC, 2) in sent
+    assert not router.active_connections
+
+
 # ---------------------------------------------------------------------------
 # AX25Address
 # ---------------------------------------------------------------------------

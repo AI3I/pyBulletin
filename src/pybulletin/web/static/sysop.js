@@ -508,7 +508,7 @@ function renderNeighbors(nbrs) {
   tbody.innerHTML = nbrs.map(n => {
     const lc  = n.last_connect_at ? new Date(n.last_connect_at*1000).toLocaleString() : "—";
     const dot = n.session_active ? "dot-green" : n.enabled ? "dot-gray" : "dot-red";
-    const status = n.session_active ? "active" : n.enabled ? "idle" : "disabled";
+    const status = n.session_active ? "active" : n.last_error ? "error" : n.enabled ? "idle" : "disabled";
     const cats = Array.isArray(n.categories) ? n.categories.join(" ") : "—";
     const call = escHtml(n.call);
     return `<tr>
@@ -517,14 +517,14 @@ function renderNeighbors(nbrs) {
       <td class="mono dim">${escHtml(n.protocol||"—")}</td>
       <td class="mono dim" style="font-size:.7rem">${escHtml(n.schedule||"—")}</td>
       <td class="mono dim">${escHtml(cats)}</td>
-      <td><span class="dot ${dot}"></span> ${status}</td>
+      <td><span class="dot ${n.last_error ? 'dot-red' : dot}"></span> ${status}<br><small>${n.pending} pending</small>${n.last_error ? `<br><small title="${escHtml(n.last_error)}">${escHtml(n.last_error)}</small>` : ''}</td>
       <td class="mono">${n.msgs_sent}</td>
       <td class="mono">${n.msgs_received}</td>
       <td class="dim">${lc}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="editNeighbor(${JSON.stringify(n).replace(/"/g,'&quot;')})">Edit</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleNeighbor('${call}',${!n.enabled})">${n.enabled?'Disable':'Enable'}</button>
-        ${n.enabled ? `<button class="btn btn-primary btn-sm" onclick="connectNeighbor('${call}')">Connect</button>` : ''}
+        ${n.enabled && !/^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$/.test(n.address||'') ? `<button class="btn btn-primary btn-sm" onclick="connectNeighbor('${call}')">Connect</button>` : ''}
         <button class="btn btn-danger btn-sm" onclick="deleteNeighbor('${call}')">Delete</button>
       </td>
     </tr>`;
@@ -544,10 +544,11 @@ function toggleAddNeighbor() {
     document.getElementById("nbr-call").value = "";
     document.getElementById("nbr-call").disabled = false;
     document.getElementById("nbr-address").value = "";
-    document.getElementById("nbr-protocol").value = "b2";
+    document.getElementById("nbr-protocol").value = "ascii";
+    document.getElementById("nbr-inbound-host").value = "";
     document.getElementById("nbr-schedule").value = "0 */2 * * *";
     document.getElementById("nbr-categories").value = "WW";
-    document.getElementById("nbr-binmode").value = "true";
+    document.getElementById("nbr-binmode").value = "false";
     document.getElementById("nbr-enabled").value = "true";
     card.style.display = "";
     document.getElementById("nbr-call").focus();
@@ -561,10 +562,11 @@ function editNeighbor(n) {
   document.getElementById("nbr-call").value = n.call;
   document.getElementById("nbr-call").disabled = true;
   document.getElementById("nbr-address").value = n.address || "";
-  document.getElementById("nbr-protocol").value = n.protocol || "b2";
+  document.getElementById("nbr-protocol").value = "ascii";
+  document.getElementById("nbr-inbound-host").value = n.inbound_host || "";
   document.getElementById("nbr-schedule").value = n.schedule || "0 */2 * * *";
   document.getElementById("nbr-categories").value = Array.isArray(n.categories) ? n.categories.join(" ") : "";
-  document.getElementById("nbr-binmode").value = n.bin_mode ? "true" : "false";
+  document.getElementById("nbr-binmode").value = "false";
   document.getElementById("nbr-enabled").value = n.enabled ? "true" : "false";
   document.getElementById("nbr-form-card").style.display = "";
   document.getElementById("nbr-form-card").scrollIntoView({ behavior: "smooth" });
@@ -574,6 +576,7 @@ async function saveNeighbor() {
   const editingCall = document.getElementById("nbr-editing-call").value;
   const call      = document.getElementById("nbr-call").value.trim().toUpperCase();
   const address   = document.getElementById("nbr-address").value.trim();
+  const inbound_host = document.getElementById("nbr-inbound-host").value.trim();
   const protocol  = document.getElementById("nbr-protocol").value;
   const schedule  = document.getElementById("nbr-schedule").value.trim();
   const catStr    = document.getElementById("nbr-categories").value.trim().toUpperCase();
@@ -584,7 +587,7 @@ async function saveNeighbor() {
   if (!call) { toast("Callsign required.", "error"); return; }
   if (!address) { toast("Address required.", "error"); return; }
 
-  const body = { address, protocol, schedule, categories, bin_mode, enabled };
+  const body = { address, inbound_host, protocol, schedule, categories, bin_mode, enabled };
 
   try {
     if (editingCall) {

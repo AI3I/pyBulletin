@@ -168,11 +168,30 @@ class AX25Router:
         reader = AX25Reader(conn, meta)
         writer = AX25Writer(conn)
 
+        neighbor = next(
+            (n for n in self._cfg.forward.neighbors
+             if n.enabled and n.call.upper() == src_key), None,
+        )
+        if self._cfg.forward.enabled and neighbor is not None:
+            from ..forward.session import ForwardSession, _RFReader, _RFWriter
+            try:
+                sent, received = await ForwardSession(
+                    self._cfg, self._store, neighbor,
+                ).run_incoming(_RFReader(reader), _RFWriter(writer))
+                await self._store.record_forward_result(src_key, sent=sent, received=received)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                await self._store.record_forward_result(src_key, error=str(exc))
+                LOG.exception("ax25: forwarding session failed for %s", src_key)
+            return
+
         router_ref = self
         session = BBSSession(
             reader, writer, meta, self._cfg, self._store, self._strings,
             heard_provider=lambda: router_ref.heard_stations,
             conference_hub=self._conf_hub,
+            router=self,
         )
         try:
             await session.run()
@@ -207,6 +226,44 @@ class AX25Router:
         frame = AX25Frame.ui(dest_addr, src_addr, info, repeaters=reps)
         tx_port = self._default_port if port is None else port
         await self._send_cb(frame, tx_port)
+
+    async def connect_outgoing(self, call: str, port: int | None = None) -> AX25Connection:
+        """Open an AX.25 connection for an outbound forwarding session."""
+        remote = AX25Address.parse(call)
+        key = str(remote).upper()
+        if key in self._connections:
+            raise RuntimeError(f"AX.25 connection already active for {key}")
+        tx_port = self._default_port if port is None else port
+
+        async def _port_send(frame: AX25Frame) -> None:
+            await self._send_cb(frame, tx_port)
+
+        conn = AX25Connection(
+            local_addr=self._local_addr,
+            remote_addr=remote,
+            send_frame_cb=_port_send,
+            t1=self._cfg.kiss.paclen / 1200 * 3 + 1.0,
+            paclen=self._cfg.kiss.paclen,
+        )
+        self._connections[key] = conn
+        self._conn_port[key] = tx_port
+        try:
+            if not await asyncio.wait_for(conn.connect(), timeout=30):
+                raise ConnectionError(f"AX.25 connect rejected by {key}")
+            return conn
+        except BaseException:
+            self._cleanup(key)
+            raise
+
+    async def close_outgoing(self, conn: AX25Connection) -> None:
+        key = str(conn.remote_addr).upper()
+        try:
+            await conn.disconnect()
+            await asyncio.wait_for(conn._disconnected_event.wait(), timeout=10)
+        except asyncio.TimeoutError:
+            LOG.warning("ax25: disconnect from %s timed out", key)
+        finally:
+            self._cleanup(key)
 
     # ------------------------------------------------------------------
     # Status / visibility

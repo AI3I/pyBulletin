@@ -325,14 +325,17 @@
         <input type="text" id="nbr-address" placeholder="bbs.example.com:7300">
       </div>
       <div class="form-row">
-        <label>Protocol</label>
+        <label>Forwarding format</label>
         <select id="nbr-protocol">
-          <option value="b2">B2F</option>
-          <option value="b1">B1</option>
+          <option value="ascii">FBB ASCII</option>
         </select>
       </div>
     </div>
     <div class="form-row-inline">
+      <div class="form-row">
+        <label>Inbound source IP (for BPQ SID)</label>
+        <input type="text" id="nbr-inbound-host" placeholder="192.168.1.10">
+      </div>
       <div class="form-row" style="flex:2">
         <label>Schedule (cron, UTC)</label>
         <input type="text" id="nbr-schedule" placeholder="0 */2 * * *">
@@ -341,7 +344,7 @@
         <label>Categories (space-separated)</label>
         <input type="text" id="nbr-categories" placeholder="WW NA US" style="text-transform:uppercase">
       </div>
-      <div class="form-row">
+      <div class="form-row" style="display:none">
         <label>Binary mode</label>
         <select id="nbr-binmode">
           <option value="true">Yes</option>

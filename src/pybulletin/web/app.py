@@ -594,6 +594,8 @@ class WebApp:
             return HTTPResponse.forbidden()
         stats_list = await self._store.list_neighbors()
         stats_map  = {n.call: n for n in stats_list}
+        errors = await self._store.forward_errors()
+        pending = await self._store.pending_delivery_counts(self._cfg.forward.neighbors)
         result = []
         for cfg in self._cfg.forward.neighbors:
             st = stats_map.get(cfg.call)
@@ -601,6 +603,7 @@ class WebApp:
                 # Config fields
                 "call":       cfg.call,
                 "address":    cfg.address,
+                "inbound_host": cfg.inbound_host,
                 "protocol":   cfg.protocol,
                 "schedule":   cfg.schedule,
                 "categories": cfg.categories,
@@ -612,6 +615,8 @@ class WebApp:
                 "msgs_received":   st.msgs_received    if st else 0,
                 "last_connect_at": int(st.last_connect_at.timestamp()) if st and st.last_connect_at else None,
                 "last_success_at": int(st.last_success_at.timestamp()) if st and st.last_success_at else None,
+                "last_error": errors.get(cfg.call.upper(), ""),
+                "pending": pending.get(cfg.call.upper(), 0),
             })
         return HTTPResponse.json(result)
 
@@ -640,7 +645,7 @@ class WebApp:
         from ..config import ForwardNeighborConfig
         n = ForwardNeighborConfig()
         object.__setattr__(n, "call", call)
-        for field in ("address", "protocol", "schedule"):
+        for field in ("address", "inbound_host", "protocol", "schedule"):
             if field in body:
                 object.__setattr__(n, field, str(body[field]))
         if "categories" in body:
@@ -664,7 +669,7 @@ class WebApp:
             body = json.loads(req.body)
         except json.JSONDecodeError:
             return HTTPResponse.bad_request("Invalid JSON")
-        for field in ("address", "protocol", "schedule"):
+        for field in ("address", "inbound_host", "protocol", "schedule"):
             if field in body:
                 object.__setattr__(n, field, str(body[field]))
         if "categories" in body:
@@ -703,7 +708,9 @@ class WebApp:
         session = ForwardSession(self._cfg, self._store, neighbor)
         try:
             sent, received = await session.run_outgoing()
+            await self._store.record_forward_result(call, sent=sent, received=received)
         except Exception as exc:
+            await self._store.record_forward_result(call, error=str(exc))
             LOG.warning("web: immediate forward to %s failed: %s", call, exc)
             return HTTPResponse.json({"ok": False, "error": str(exc)}, status=502)
         return HTTPResponse.json({"ok": True, "sent": sent, "received": received})

@@ -1,6 +1,6 @@
 # pyBulletin
 
-A modern packet radio BBS written in Python, compatible with FBB/LinFBB clients and neighbor nodes. Supports Telnet access, AX.25/KISS TNC transport, B1/B2F store-and-forward message exchange, and a web-based sysop console.
+A packet radio BBS written in Python. Supports Telnet access, AX.25/KISS TNC transport, FBB ASCII store-and-forward exchange, and a web-based sysop console.
 
 ---
 
@@ -9,7 +9,7 @@ A modern packet radio BBS written in Python, compatible with FBB/LinFBB clients 
 - **FBB-compatible command set** — full L/S/R/K family plus RA, RP, LS, LD, LN, LR, LW, NB, NH, MV, ED, NS, ME, BB, WS, DT, X, and more
 - **Telnet access** — multi-client asyncio server, configurable idle timeout and rate limits
 - **AX.25 / KISS transport** — modulo-8 windowed I-frame connections over serial or TCP KISS TNC (Dire Wolf, soundmodem)
-- **B2F forwarding** — outbound and inbound store-and-forward with LZHUF compression; falls back to B1 for older nodes
+- **FBB ASCII forwarding** — outbound and inbound message exchange with BID duplicate checks and per-neighbor delivery tracking
 - **White Pages (WP)** — distributed callbook with NB/NH/NL/NQ/NZ profile commands and WPS search
 - **SQLite store** — single-file database with versioned schema migrations, WAL mode, and configurable retention
 - **Web sysop console** — SYSOP login dashboard for message management, user admin, and live session monitoring
@@ -69,7 +69,7 @@ sudo bash deploy/uninstall.sh
 - Install and enable systemd units:
   - `pybulletin.service` — core BBS service (Telnet + RF + forwarding)
   - `pybulletinweb.service` — web UI and sysop console
-  - `pybulletin-forward.service` / `.timer` — scheduled forwarding
+  - built-in core scheduler — scheduled TCP and AX.25 forwarding
   - `pybulletin-retention.service` / `.timer` — nightly message cleanup
 - Drop a starter config at `/home/pybulletin/pyBulletin/config/pybulletin.toml`
 
@@ -86,8 +86,10 @@ sudo bash deploy/doctor.sh
 
 `upgrade.sh` backs up the installed config under
 `/home/pybulletin/pyBulletin/config/backups/`, syncs the application tree,
-refreshes systemd/fail2ban/logrotate files, and restarts both services. It also
-migrates the old hyphenated web unit name away: `pybulletin-web.service` is
+refreshes systemd/fail2ban/logrotate files, and restarts both services. It
+disables the legacy `pybulletin-forward.timer` because the core service runs
+the forwarding scheduler. It also migrates the old hyphenated web unit name:
+`pybulletin-web.service` is
 disabled and removed, and the active web unit is `pybulletinweb.service`.
 
 After upgrading, check:
@@ -148,7 +150,7 @@ The BBS listens on:
 |---------|---------|-----------|
 | Telnet | `0.0.0.0:6300` | `[telnet] host / port` |
 | Sysop web console | `127.0.0.1:8080` | `[web] host / port` |
-| B2F inbound forward | `0.0.0.0:6301` | `[forward] listen_host / listen_port` |
+| FBB inbound forward | `0.0.0.0:6301` | `[forward] listen_host / listen_port` |
 | Public web (opt.) | same as web service, `/` | `[public_web] enabled` |
 
 ---
@@ -559,21 +561,27 @@ End a message with `/EX` or `Ctrl-Z`. Abort with `/AB`.
 
 ## Forwarding
 
-pyBulletin supports both **outbound** (caller) and **inbound** (called) B2F forwarding sessions.
+pyBulletin supports both **outbound** (caller) and **inbound** (called) FBB ASCII forwarding sessions.
+Existing `protocol = "b1"` or `"b2"` neighbor settings load for upgrades, but
+forwarding uses ASCII until compressed B1/B2 has been verified against real peers.
 
 **Outbound** connects are triggered by the cron schedule defined per neighbor, or manually with the `F` command.
+For an RF callsign address, manual `F` runs in the core BBS session; the web
+service cannot access the core service's AX.25 router.
 
-**Inbound** connections are accepted on `[forward] listen_port` (default 6301). The remote node must connect with a B2F SID handshake.
+**Inbound** connections are accepted on `[forward] listen_port` (default 6301). The remote node must use an FBB SID handshake and match an enabled neighbor by callsign or configured `inbound_host` source IP.
 
-### Tested Interoperability
+### Interoperability targets
+
+The table below describes intended protocol compatibility. Automated tests
+currently exchange mail between pyBulletin nodes; live BPQ interoperability
+needs the [BPQ/RF validation checklist](docs/forwarding-validation.md).
 
 | Software | Protocol |
 |----------|----------|
-| LinFBB (F6FBB) | B2F |
-| BPQ32 (G8BPQ) | B2F |
-| JNOS | B2F |
-| Winlink / Airmail | B2F |
-| Kantronics KPC-3 PBBS | B1 (falls back automatically) |
+| LinFBB (F6FBB) | FBB ASCII; live validation pending |
+| BPQ32 / LinBPQ (G8BPQ) | FBB ASCII; live validation pending |
+| JNOS | FBB ASCII; live validation pending |
 
 ---
 
@@ -614,7 +622,8 @@ Test files:
 | `tests/test_store.py` | SQLite store — messages, users, WP, prefs |
 | `tests/test_ax25.py` | AX.25 framing, KISS, connection state machine |
 | `tests/test_cli_rf.py` | RF diagnostics, config validation, and PTT command behavior |
-| `tests/test_forward.py` | SID parsing, B1/B2F proposal and message encoding |
+| `tests/test_forward.py` | SID parsing and legacy binary helper tests |
+| `tests/test_forward_integration.py` | FBB ASCII exchange, retry, delivery state, backup restore |
 | `tests/test_engine.py` | Command dispatch via `FakeSession` |
 | `tests/test_web_server.py` | stdlib HTTP server behavior, including `HEAD` support |
 
@@ -631,13 +640,13 @@ src/pybulletin/
   session/          — BBSSession: login, prompt loop, paging
   command/          — CommandEngine: all BBS commands
   store/            — BBSStore: SQLite, models, migrations
-  forward/          — B2F forwarding: SID, protocol, scheduler
+  forward/          — FBB forwarding: SID, protocol, scheduler
   ax25/             — AX.25 framing, KISS TNC transport
   transport/        — abstract transport layer
   web/              — stdlib HTTP/WebSocket sysop console + public web
   address.py        — hierarchical bulletin address matching
 vendor/
-  lzhuf.py          — pure-Python LZHUF compression (B2F)
+  lzhuf.py          — experimental LZHUF helper (not advertised on the wire)
 config/
   pybulletin.toml   — example configuration
   strings.toml      — message strings (localizable)

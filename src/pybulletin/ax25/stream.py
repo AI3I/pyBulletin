@@ -40,6 +40,7 @@ class AX25Reader:
         self._conn = conn
         self._meta = meta
         self._buf  = bytearray()
+        self._skip_lf = False
 
     def has_replies(self) -> bool:
         # AX.25 has no IAC negotiation
@@ -48,15 +49,24 @@ class AX25Reader:
     def take_replies(self) -> bytes:
         return b""
 
+    def at_eof(self) -> bool:
+        return self._conn._disconnected_event.is_set() and not self._buf
+
     async def readline(self) -> str:
         """Return the next complete line (strips CR/LF)."""
         while True:
+            if self._skip_lf and self._buf:
+                if self._buf[0] == 10:
+                    del self._buf[0]
+                self._skip_lf = False
             # Check buffer for a complete line
             for sep in (b"\r\n", b"\r", b"\n"):
                 idx = self._buf.find(sep)
                 if idx >= 0:
                     line = self._buf[:idx]
                     del self._buf[:idx + len(sep)]
+                    if sep == b"\r":
+                        self._skip_lf = True
                     return line.decode("ascii", errors="replace")
 
             # Need more data
