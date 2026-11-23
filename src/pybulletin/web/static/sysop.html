@@ -352,8 +352,8 @@
         <input type="text" id="nbr-schedule" placeholder="0 */2 * * *">
       </div>
       <div class="form-row" style="flex:2">
-        <label>Categories (space-separated)</label>
-        <input type="text" id="nbr-categories" placeholder="WW NA US" style="text-transform:uppercase">
+        <label>Route areas (space-separated @ addresses; WW matches all)</label>
+        <input type="text" id="nbr-categories" placeholder="WW USA.NA CA.USA.NA" style="text-transform:uppercase">
       </div>
       <div class="form-row" style="display:none">
         <label>Binary mode</label>
@@ -374,6 +374,7 @@
       <button class="btn btn-primary btn-sm" id="nbr-save-btn" onclick="saveNeighbor()">Save</button>
       <button class="btn btn-ghost btn-sm" onclick="toggleAddNeighbor()">Cancel</button>
     </div>
+    <p class="dim">Restart the BBS core after changing neighbors so scheduled and RF connections use the new routes.</p>
     <input type="hidden" id="nbr-editing-call">
   </div>
 

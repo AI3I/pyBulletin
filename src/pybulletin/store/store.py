@@ -562,8 +562,9 @@ class BBSStore:
             )
             self._conn.commit()
 
-    async def pending_delivery_counts(self, neighbors: list[Any]) -> dict[str, int]:
+    async def pending_delivery_counts(self, neighbors: list[Any], node_call: str = "") -> dict[str, int]:
         """Count eligible messages not yet sent to each configured neighbor."""
+        from ..forward.routes import matching_neighbors
         messages = await self.list_messages()
         result: dict[str, int] = {}
         for neighbor in neighbors:
@@ -571,12 +572,7 @@ class BBSStore:
             result[neighbor.call.upper()] = sum(
                 1 for msg in messages
                 if msg.id not in delivered and msg.status not in (STATUS_KILLED, "H")
-                and neighbor.call.upper() not in msg.forward_path.upper().split()
-                and (
-                    (msg.msg_type == MSG_PRIVATE and msg.at_bbs.upper() == neighbor.call.upper())
-                    or (msg.msg_type in (MSG_BULLETIN, MSG_NTS)
-                        and any(msg.to_call.upper().startswith(cat.upper()) for cat in neighbor.categories))
-                )
+                and neighbor in matching_neighbors(msg, neighbors, node_call=node_call)
             )
         return result
 

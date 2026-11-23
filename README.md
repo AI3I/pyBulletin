@@ -415,9 +415,9 @@ listen_port  = 6301
 [[forward.neighbor]]
 call       = "AI3I-1"
 address    = "w1bbs.example.net:6301"
-protocol   = "b2"
+protocol   = "b0"
 schedule   = "0 */4 * * *"   # UTC cron — every 4 hours
-categories = ["WW", "NA", "US"]
+categories = ["WW", "USA.NA"] # matching @ address areas; WW catches all
 enabled    = true
 ```
 
@@ -561,26 +561,35 @@ End a message with `/EX` or `Ctrl-Z`. Abort with `/AB`.
 
 ## Forwarding
 
-pyBulletin supports both **outbound** (caller) and **inbound** (called) FBB ASCII forwarding sessions.
-Existing `protocol = "b1"` or `"b2"` neighbor settings load for upgrades, but
-forwarding uses ASCII until compressed B1/B2 has been verified against real peers.
+pyBulletin supports both **outbound** (caller) and **inbound** (called) FBB ASCII
+and compressed B0 forwarding sessions. Set `protocol = "b0"` for LinBPQ's
+compressed FBB exchange. Existing `protocol = "b1"` or `"b2"` settings load
+for upgrades but use ASCII until those modes have been verified.
 
 **Outbound** connects are triggered by the cron schedule defined per neighbor, or manually with the `F` command.
-For an RF callsign address, manual `F` runs in the core BBS session; the web
-service cannot access the core service's AX.25 router.
+The SYSOP neighbor list also has a **Connect RF** action for neighbors whose
+address is an AX.25 callsign. The web service sends that request to the core
+service, which owns the KISS link and AX.25 router. Restart the core service
+after changing neighbor settings in the web console.
+
+Outbound selection uses the message's `@` address. A private message or NTS
+message takes the most specific matching neighbor route; a bulletin addressed
+to a named BBS also takes one route. Area bulletins go to every matching
+neighbor. `categories` contains complete hierarchical `@` suffixes such as
+`USA.NA`; `WW` is the catch-all. Already visited neighbors are skipped.
 
 **Inbound** connections are accepted on `[forward] listen_port` (default 6301). The remote node must use an FBB SID handshake and match an enabled neighbor by callsign or configured `inbound_host` source IP.
 
 ### Interoperability targets
 
-The table below describes intended protocol compatibility. Automated tests
-currently exchange mail between pyBulletin nodes; live BPQ interoperability
-needs the [BPQ/RF validation checklist](docs/forwarding-validation.md).
+The table below describes protocol compatibility. The local LinBPQ TCP lab has
+exchanged compressed B0 mail in both directions. RF and LinFBB still need the
+[BPQ/RF validation checklist](docs/forwarding-validation.md).
 
 | Software | Protocol |
 |----------|----------|
 | LinFBB (F6FBB) | FBB ASCII; live validation pending |
-| BPQ32 / LinBPQ (G8BPQ) | FBB ASCII; live validation pending |
+| BPQ32 / LinBPQ (G8BPQ) | FBB compressed B0; LinBPQ TCP lab validated |
 | JNOS | FBB ASCII; live validation pending |
 
 ---

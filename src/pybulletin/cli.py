@@ -215,10 +215,13 @@ async def _serve_core(config_path: str) -> None:
 
     # --- Periodic forward scheduler ---
     fwd_task = None
+    control_server = None
     if cfg.forward.enabled:
         from .forward.scheduler import ForwardScheduler
+        from .forward.control import start_control_server
 
         fwd_scheduler = ForwardScheduler(cfg, store, router if ax25_link else None)
+        control_server = await start_control_server(cfg, fwd_scheduler)
 
         async def _fwd_loop():
             import time as _time
@@ -250,6 +253,9 @@ async def _serve_core(config_path: str) -> None:
             await fwd_task
         except asyncio.CancelledError:
             pass
+    if control_server:
+        from .forward.control import stop_control_server
+        await stop_control_server(control_server, cfg)
     if beacon:
         beacon.stop()
     if pactor_link:
@@ -731,10 +737,13 @@ async def _serve(config_path: str) -> None:
 
     # --- Periodic forward scheduler ---
     fwd_task = None
+    control_server = None
     if cfg.forward.enabled:
         from .forward.scheduler import ForwardScheduler
+        from .forward.control import start_control_server
 
         fwd_scheduler = ForwardScheduler(cfg, store, router if ax25_link else None)
+        control_server = await start_control_server(cfg, fwd_scheduler)
 
         async def _fwd_loop():
             # Align to the next whole minute, then tick every 60 s — mirrors cron.
@@ -767,6 +776,9 @@ async def _serve(config_path: str) -> None:
             await fwd_task
         except asyncio.CancelledError:
             pass
+    if control_server:
+        from .forward.control import stop_control_server
+        await stop_control_server(control_server, cfg)
     if beacon:
         beacon.stop()
     if pactor_link:

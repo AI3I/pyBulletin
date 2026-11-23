@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from .sid import SID, generate as gen_sid, parse as parse_sid, detect_software
 from .protocol import Proposal, parse_fs_response
 from .binary import encode_fa, decode_fa
+from .routes import matching_neighbors
 from ..store.models import (
     Message, MSG_PRIVATE, MSG_BULLETIN, MSG_NTS,
 )
@@ -426,29 +427,15 @@ class ForwardSession:
         msgs = await self._store.list_messages()
         delivered = await self._store.delivered_message_ids(neighbor.call)
         selected: list[Message] = []
-        node_call = self._cfg.node.node_call.upper()
 
         for msg in msgs:
             if msg.id in delivered or (attempted and msg.id in attempted) or msg.status in ("K", "H"):
                 continue
-            # Skip messages we originated from this neighbor (loop prevention)
-            if node_call in msg.forward_path.upper().split():
-                continue
-            if neighbor.call.upper() in msg.forward_path.upper().split():
-                continue
-
-            if msg.msg_type == MSG_PRIVATE:
-                # Private: forward if at_bbs matches this neighbor
-                if msg.at_bbs and msg.at_bbs.upper() == neighbor.call.upper():
-                    selected.append(msg)
-
-            elif msg.msg_type in (MSG_BULLETIN, MSG_NTS):
-                # Bulletins: forward if to_call matches one of the neighbor's categories
-                to_hier = msg.to_call.upper()
-                for cat in neighbor.categories:
-                    if to_hier == cat.upper() or to_hier.startswith(cat.upper()):
-                        selected.append(msg)
-                        break
+            if neighbor in matching_neighbors(
+                msg, self._cfg.forward.neighbors or [neighbor],
+                node_call=self._cfg.node.node_call,
+            ):
+                selected.append(msg)
 
         # The basic FBB protocol allows at most five proposals in a block.
         return selected[:5]

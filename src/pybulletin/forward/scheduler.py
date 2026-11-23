@@ -2,7 +2,7 @@
 dispatch ForwardSession for each neighbor whose window is now open.
 
 Intended to be called from the ``run-forward`` CLI subcommand (one-shot) or
-from a long-running periodic task inside ``serve-core`` (future phase).
+from a long-running periodic task inside ``serve-core``.
 
 Usage (one-shot)::
 
@@ -35,6 +35,29 @@ class ForwardScheduler:
         self._cfg   = cfg
         self._store = store
         self._router = router
+        self._session_lock = asyncio.Lock()
+
+    async def connect_now(self, call: str) -> tuple[int, int]:
+        """Run one configured peer now, serializing with scheduled sessions."""
+        neighbor = next(
+            (n for n in self._cfg.forward.neighbors
+             if n.enabled and n.call.upper() == call.upper()),
+            None,
+        )
+        if neighbor is None or not self._cfg.forward.enabled:
+            raise ValueError(f"enabled forward neighbor {call} not found in core configuration")
+        async with self._session_lock:
+            try:
+                sent, received = await ForwardSession(
+                    self._cfg, self._store, neighbor, self._router,
+                ).run_outgoing()
+                await self._store.record_forward_result(
+                    neighbor.call, sent=sent, received=received,
+                )
+                return sent, received
+            except Exception as exc:
+                await self._store.record_forward_result(neighbor.call, error=str(exc))
+                raise
 
     async def run_once(self) -> tuple[int, int]:
         """Check all neighbors and forward to those whose schedule matches now.
@@ -60,17 +83,13 @@ class ForwardScheduler:
                 continue
 
             LOG.info("scheduler: initiating session with %s", neighbor.call)
-            session = ForwardSession(self._cfg, self._store, neighbor, self._router)
             try:
-                sent, received = await session.run_outgoing()
+                sent, received = await self.connect_now(neighbor.call)
                 total_sent     += sent
                 total_received += received
-                await self._store.record_forward_result(
-                    neighbor.call, sent=sent, received=received)
                 LOG.info("scheduler: %s — sent %d, received %d",
                          neighbor.call, sent, received)
             except Exception as exc:
-                await self._store.record_forward_result(neighbor.call, error=str(exc))
                 LOG.warning("scheduler: session with %s failed: %s",
                             neighbor.call, exc)
 

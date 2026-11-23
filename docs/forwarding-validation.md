@@ -1,8 +1,10 @@
 # BPQ and RF forwarding validation
 
-The automated TCP test in `tests/test_forward_integration.py` exchanges mail
-between two pyBulletin nodes. It verifies session ordering, BID duplicate
+The automated TCP and simulated KISS TCP tests in `tests/test_forward_integration.py`
+exchange mail between two pyBulletin nodes. They verify session ordering, BID duplicate
 handling, per-neighbor delivery state, schema upgrade, and backup restoration.
+The KISS test carries AX.25 frames in both directions and triggers the outbound
+session through the same local control socket used by the SYSOP Connect RF action.
 The local TCP lab has also exchanged a bulletin and private messages in both
 directions with LinBPQ 6.0.26.1 using compressed B0. Run the remaining checks
 below before treating a BPQ link or an RF path as production-ready.
@@ -19,7 +21,8 @@ For a local TCP-only LinBPQ instance, see the [LinBPQ lab](linbpq-lab.md).
    `inbound_host` to BPQ's source IP when BPQ's SID
    omits the BBS callsign.
    Restart `pybulletin.service` after changing neighbor configuration in the
-   web console so the core listener and scheduler load the new settings.
+   web console so the core listener, scheduler, and Connect RF action use the
+   new settings.
    Use a reachable
    `host:port` for TCP, or a callsign for outbound AX.25 from `serve-core`.
 3. Keep `allow_unknown_peers = false`; add each inbound peer explicitly.

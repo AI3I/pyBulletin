@@ -595,7 +595,9 @@ class WebApp:
         stats_list = await self._store.list_neighbors()
         stats_map  = {n.call: n for n in stats_list}
         errors = await self._store.forward_errors()
-        pending = await self._store.pending_delivery_counts(self._cfg.forward.neighbors)
+        pending = await self._store.pending_delivery_counts(
+            self._cfg.forward.neighbors, self._cfg.node.node_call,
+        )
         result = []
         for cfg in self._cfg.forward.neighbors:
             st = stats_map.get(cfg.call)
@@ -709,12 +711,16 @@ class WebApp:
         )
         if neighbor is None:
             return HTTPResponse.not_found()
-        from ..forward.session import ForwardSession
+        from ..forward.session import ForwardSession, _RF_CALL
         LOG.info("web: %s triggered immediate forward session with %s", sess.call, call)
-        session = ForwardSession(self._cfg, self._store, neighbor)
         try:
-            sent, received = await session.run_outgoing()
-            await self._store.record_forward_result(call, sent=sent, received=received)
+            if _RF_CALL.fullmatch(neighbor.address.upper()):
+                from ..forward.control import request_connect
+                sent, received = await request_connect(self._cfg, call)
+            else:
+                session = ForwardSession(self._cfg, self._store, neighbor)
+                sent, received = await session.run_outgoing()
+                await self._store.record_forward_result(call, sent=sent, received=received)
         except Exception as exc:
             await self._store.record_forward_result(call, error=str(exc))
             LOG.warning("web: immediate forward to %s failed: %s", call, exc)

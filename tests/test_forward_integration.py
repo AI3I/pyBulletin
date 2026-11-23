@@ -8,6 +8,10 @@ import pytest
 
 from pybulletin.config import AppConfig, ForwardNeighborConfig, load_config, save_config
 from pybulletin.ax25.router import AX25Router
+from pybulletin.transport.kiss_tcp import KissTcpLink
+from pybulletin.transport.kiss import decode_stream, CMD_DATA
+from pybulletin.forward.control import request_connect, start_control_server, stop_control_server
+from pybulletin.forward.scheduler import ForwardScheduler
 from pybulletin.forward.session import ForwardSession, inbound_neighbor, _WireReader
 from pybulletin.forward.binary import encode_fa, decode_fa
 from pybulletin.forward.protocol import lzhuf_compress, lzhuf_decompress
@@ -75,6 +79,7 @@ async def test_inbound_peer_policy_and_delivery_status(tmp_path):
     cfg.forward.allow_unknown_peers = True
     assert inbound_neighbor(cfg.forward, "X1XXX") is not None
     assert inbound_neighbor(cfg.forward, "B1BBB") is None
+    cfg.forward.neighbors[0].enabled = True
 
     msg = Message(msg_type=MSG_BULLETIN, from_call="A1AAA", to_call="WW", body="Hello")
     await store.insert_message(msg)
@@ -351,6 +356,81 @@ async def test_ax25_forwarding_between_two_routers(tmp_path):
         if router_b._session_tasks:
             await asyncio.wait_for(asyncio.gather(*router_b._session_tasks.values()), 2)
     finally:
+        await a.close()
+        await b.close()
+
+
+async def test_manual_rf_forwarding_both_directions_over_kiss_tcp(tmp_path):
+    """A local KISS relay carries real framed AX.25 traffic in both directions."""
+    a = BBSStore(str(tmp_path / "kiss-a.db"))
+    b = BBSStore(str(tmp_path / "kiss-b.db"))
+    cfg_a, cfg_b = AppConfig(), AppConfig()
+    cfg_a.store.sqlite_path = str(tmp_path / "kiss-a.db")
+    cfg_b.store.sqlite_path = str(tmp_path / "kiss-b.db")
+    cfg_a.node.node_call = "A1AAA"
+    cfg_b.node.node_call = "B1BBB"
+    cfg_a.forward.neighbors = [ForwardNeighborConfig(call="B1BBB", address="B1BBB")]
+    cfg_b.forward.neighbors = [ForwardNeighborConfig(call="A1AAA", address="A1AAA")]
+    await a.insert_message(Message(
+        msg_type=MSG_BULLETIN, from_call="A1AAA", to_call="ALL", at_bbs="WW",
+        subject="Outbound", body="A to B over KISS",
+    ))
+    await b.insert_message(Message(
+        msg_type=MSG_PRIVATE, from_call="B1BBB", to_call="A1AAA", at_bbs="A1AAA",
+        subject="Return", body="B to A over KISS",
+    ))
+
+    clients = []
+    frames = []
+    connected = asyncio.Event()
+
+    async def relay(reader, writer):
+        clients.append(writer)
+        if len(clients) == 2:
+            connected.set()
+        buf = bytearray()
+        try:
+            while data := await reader.read(4096):
+                buf.extend(data)
+                frames.extend((port, cmd) for port, cmd, _ in decode_stream(buf))
+                for peer in clients:
+                    if peer is not writer and not peer.is_closing():
+                        peer.write(data)
+                        await peer.drain()
+        finally:
+            clients.remove(writer)
+            writer.close()
+            await writer.wait_closed()
+
+    server = await asyncio.start_server(relay, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    link_a = link_b = None
+    control = None
+    try:
+        router_a = AX25Router(cfg_a, a, None, lambda frame, kiss_port: link_a.send_frame(frame, kiss_port))
+        router_b = AX25Router(cfg_b, b, None, lambda frame, kiss_port: link_b.send_frame(frame, kiss_port))
+        link_a = KissTcpLink("127.0.0.1", port, router_a, reconnect=False)
+        link_b = KissTcpLink("127.0.0.1", port, router_b, reconnect=False)
+        link_a.start()
+        link_b.start()
+        await asyncio.wait_for(connected.wait(), 3)
+        control = await start_control_server(cfg_a, ForwardScheduler(cfg_a, a, router_a))
+        assert await asyncio.wait_for(request_connect(cfg_a, "B1BBB"), 12) == (1, 1)
+        assert [(m.subject, m.body) for m in await b.list_messages() if m.subject == "Outbound"] == [
+            ("Outbound", "A to B over KISS")]
+        assert [(m.subject, m.body) for m in await a.list_messages() if m.subject == "Return"] == [
+            ("Return", "B to A over KISS")]
+        assert len(frames) > 4 and all(cmd == CMD_DATA for _, cmd in frames)
+        assert (await a.pending_delivery_counts(cfg_a.forward.neighbors, "A1AAA"))["B1BBB"] == 0
+    finally:
+        if control:
+            await stop_control_server(control, cfg_a)
+        if link_a:
+            await link_a.stop()
+        if link_b:
+            await link_b.stop()
+        server.close()
+        await server.wait_closed()
         await a.close()
         await b.close()
 

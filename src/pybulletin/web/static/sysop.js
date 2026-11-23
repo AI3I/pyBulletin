@@ -524,7 +524,7 @@ function renderNeighbors(nbrs) {
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="editNeighbor(${JSON.stringify(n).replace(/"/g,'&quot;')})">Edit</button>
         <button class="btn btn-ghost btn-sm" onclick="toggleNeighbor('${call}',${!n.enabled})">${n.enabled?'Disable':'Enable'}</button>
-        ${n.enabled && !/^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$/.test(n.address||'') ? `<button class="btn btn-primary btn-sm" onclick="connectNeighbor('${call}')">Connect</button>` : ''}
+        ${n.enabled ? `<button class="btn btn-primary btn-sm" onclick="connectNeighbor('${call}')">Connect${/^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$/.test((n.address||'').toUpperCase()) ? ' RF' : ''}</button>` : ''}
         <button class="btn btn-danger btn-sm" onclick="deleteNeighbor('${call}')">Delete</button>
       </td>
     </tr>`;
