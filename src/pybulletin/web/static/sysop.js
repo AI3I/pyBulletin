@@ -544,6 +544,8 @@ function toggleAddNeighbor() {
     document.getElementById("nbr-call").value = "";
     document.getElementById("nbr-call").disabled = false;
     document.getElementById("nbr-address").value = "";
+    document.getElementById("nbr-login-user").value = "";
+    document.getElementById("nbr-login-password").value = "";
     document.getElementById("nbr-protocol").value = "ascii";
     document.getElementById("nbr-inbound-host").value = "";
     document.getElementById("nbr-schedule").value = "0 */2 * * *";
@@ -562,7 +564,9 @@ function editNeighbor(n) {
   document.getElementById("nbr-call").value = n.call;
   document.getElementById("nbr-call").disabled = true;
   document.getElementById("nbr-address").value = n.address || "";
-  document.getElementById("nbr-protocol").value = "ascii";
+  document.getElementById("nbr-login-user").value = n.login_user || "";
+  document.getElementById("nbr-login-password").value = "";
+  document.getElementById("nbr-protocol").value = n.protocol || "ascii";
   document.getElementById("nbr-inbound-host").value = n.inbound_host || "";
   document.getElementById("nbr-schedule").value = n.schedule || "0 */2 * * *";
   document.getElementById("nbr-categories").value = Array.isArray(n.categories) ? n.categories.join(" ") : "";
@@ -576,6 +580,8 @@ async function saveNeighbor() {
   const editingCall = document.getElementById("nbr-editing-call").value;
   const call      = document.getElementById("nbr-call").value.trim().toUpperCase();
   const address   = document.getElementById("nbr-address").value.trim();
+  const login_user = document.getElementById("nbr-login-user").value.trim();
+  const login_password = document.getElementById("nbr-login-password").value;
   const inbound_host = document.getElementById("nbr-inbound-host").value.trim();
   const protocol  = document.getElementById("nbr-protocol").value;
   const schedule  = document.getElementById("nbr-schedule").value.trim();
@@ -587,7 +593,8 @@ async function saveNeighbor() {
   if (!call) { toast("Callsign required.", "error"); return; }
   if (!address) { toast("Address required.", "error"); return; }
 
-  const body = { address, inbound_host, protocol, schedule, categories, bin_mode, enabled };
+  const body = { address, login_user, inbound_host, protocol, schedule, categories, bin_mode, enabled };
+  if (login_password) body.login_password = login_password;
 
   try {
     if (editingCall) {

@@ -122,7 +122,7 @@ def detect_software(raw: str) -> str:
     return inner[:40]
 
 
-def generate(node_call: str) -> str:
+def generate(node_call: str, *, compressed: bool = False) -> str:
     """Generate our SID string for the given node callsign."""
     if "-" in node_call:
         call, _, ssid_str = node_call.upper().partition("-")
@@ -135,4 +135,5 @@ def generate(node_call: str) -> str:
 
     ssid_part = f"-{ssid}" if ssid else ""
     sw = f"pyBulletin{__version__}"
-    return f"[{call}{ssid_part}-{sw}-{_OUR_FLAGS}$]"
+    flags = "B" + _OUR_FLAGS if compressed else _OUR_FLAGS
+    return f"[{call}{ssid_part}-{sw}-{flags}$]"

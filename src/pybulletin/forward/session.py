@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 
 from .sid import SID, generate as gen_sid, parse as parse_sid, detect_software
 from .protocol import Proposal, parse_fs_response
+from .binary import encode_fa, decode_fa
 from ..store.models import (
     Message, MSG_PRIVATE, MSG_BULLETIN, MSG_NTS,
 )
@@ -33,15 +34,16 @@ from ..store.models import (
 _RF_CALL = re.compile(r"[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?\Z")
 
 
-def _format_ascii_proposal(msg: Message) -> str:
-    wire_type = "B" if msg.msg_type == MSG_BULLETIN else "P"
-    return (f"FB {wire_type} {msg.from_call} {msg.at_bbs or msg.to_call} "
+def _format_ascii_proposal(msg: Message, *, compressed: bool = False) -> str:
+    wire_type = {MSG_BULLETIN: "B", MSG_NTS: "T"}.get(msg.msg_type, "P")
+    command = "FA" if compressed else "FB"
+    return (f"{command} {wire_type} {msg.from_call} {msg.at_bbs or msg.to_call} "
             f"{msg.to_call} {msg.bid} {msg.size}")
 
 
 def _parse_ascii_proposal(line: str) -> Proposal | None:
     fields = line.split()
-    if len(fields) != 7 or fields[0] != "FB" or fields[1] not in ("P", "B"):
+    if len(fields) != 7 or fields[0] not in ("FB", "FA") or fields[1] not in ("P", "B", "T"):
         return None
     try:
         size = int(fields[6])
@@ -155,6 +157,8 @@ class ForwardSession:
         neighbor: ForwardNeighborConfig,
         router=None,
     ) -> None:
+        if neighbor.protocol.lower() not in ("ascii", "b0"):
+            raise ValueError(f"unsupported FBB forwarding format: {neighbor.protocol}")
         self._cfg      = cfg
         self._store    = store
         self._neighbor = neighbor
@@ -165,6 +169,7 @@ class ForwardSession:
         self._remote_sid: SID | None = None
         self._sent    = 0
         self._received = 0
+        self._binary = neighbor.protocol.lower() == "b0"
 
     # ------------------------------------------------------------------
     # Public entry points
@@ -213,6 +218,15 @@ class ForwardSession:
             raise ConnectionError(f"connect to {self._neighbor.call} failed: {exc}") from exc
 
         try:
+            if self._neighbor.login_user:
+                if not self._neighbor.login_password:
+                    raise ValueError("TCP forwarding login password is missing")
+                if any(c in self._neighbor.login_user + self._neighbor.login_password for c in "\r\n"):
+                    raise ValueError("TCP forwarding credentials cannot contain line breaks")
+                # LinBPQ FBBPORT sends no initial prompt. It expects these
+                # lines before the BBS banner and SID.
+                await self._writeline(self._neighbor.login_user)
+                await self._writeline(self._neighbor.login_password)
             await self._run(caller=True)
         finally:
             await self._close()
@@ -246,14 +260,21 @@ class ForwardSession:
     async def _run(self, caller: bool, greeted: bool = False) -> None:
         assert self._reader and self._writer
 
-        our_sid = gen_sid(self._cfg.node.node_call)
+        our_sid = gen_sid(self._cfg.node.node_call, compressed=self._binary)
         if not caller and not greeted:
             await self._writeline(our_sid)
             await self._writeline(">")
 
         # Read until we get a SID from the remote
-        remote_sid_str = await self._readline()
-        self._remote_sid = parse_sid(remote_sid_str)
+        remote_sid_str = ""
+        for _ in range(20):
+            remote_sid_str = await self._readline()
+            if not remote_sid_str:
+                continue
+            self._remote_sid = parse_sid(remote_sid_str)
+            if self._remote_sid:
+                break
+            LOG.debug("forward: (pre-SID) %r", remote_sid_str[:80])
         if self._remote_sid:
             actual_call = (f"{self._remote_sid.call}-{self._remote_sid.ssid}"
                            if self._remote_sid.ssid else self._remote_sid.call).upper()
@@ -266,6 +287,8 @@ class ForwardSession:
                      self._remote_sid.flags)
             if "F" not in self._remote_sid.flags:
                 raise ConnectionError("remote SID does not offer FBB forwarding")
+            if self._binary and "B" not in self._remote_sid.flags:
+                raise ConnectionError("remote SID does not offer compressed FBB forwarding")
         else:
             sw = detect_software(remote_sid_str)
             LOG.warning("forward: non-standard SID from %s (%s): %r",
@@ -277,8 +300,8 @@ class ForwardSession:
             while True:
                 line = await self._readline()
                 if not line:
-                    raise ConnectionError(f"no forwarding prompt from {self._neighbor.call}")
-                if line.strip() == ">":
+                    continue
+                if line.strip().endswith(">"):
                     break
                 LOG.debug("forward: (pre-prompt) %r", line[:60])
             await self._writeline(our_sid)
@@ -323,14 +346,16 @@ class ForwardSession:
         LOG.info("forward: %d message(s) to send to %s",
                  len(outgoing), self._neighbor.call)
 
+        proposal_sum = 0
         for msg in outgoing:
-            line = _format_ascii_proposal(msg)
+            line = _format_ascii_proposal(msg, compressed=self._binary)
             await self._writeline(line)
+            proposal_sum += sum((line + "\r").encode("ascii", "replace"))
             LOG.debug("forward: proposal → %s", line)
         if not outgoing:
             await self._writeline("FF")
             return [], False
-        await self._writeline("F>")
+        await self._writeline(f"F> {-proposal_sum & 0xff:02X}" if self._binary else "F>")
 
         fs_line = await self._readline()
         if not fs_line.startswith("FS"):
@@ -357,20 +382,31 @@ class ForwardSession:
 
     async def _receive_batch(self) -> str:
         incoming_proposals: list[Proposal] = []
+        proposal_sum = 0
         while True:
             line = await self._readline()
             if line == "FF":
                 return "FF"
             if line == "FQ":
                 return "FQ"
-            if line == "F>":
+            if line == "F>" or line.startswith("F> "):
+                if line.startswith("F> "):
+                    try:
+                        checksum = int(line[3:].strip(), 16)
+                    except ValueError as exc:
+                        raise ValueError("invalid FBB proposal checksum") from exc
+                    if (proposal_sum + checksum) & 0xff:
+                        raise ValueError("FBB proposal checksum mismatch")
                 break
             if not line or line == "FQ":
                 raise ConnectionError(f"proposal batch ended unexpectedly from {self._neighbor.call}")
             prop = _parse_ascii_proposal(line)
             if not prop:
                 raise ValueError(f"invalid FBB proposal: {line[:80]!r}")
+            if self._binary != line.startswith("FA "):
+                raise ValueError(f"unexpected FBB proposal mode: {line[:80]!r}")
             incoming_proposals.append(prop)
+            proposal_sum += sum((line + "\r").encode("ascii", "replace"))
 
         # Respond to incoming proposals
         await self._respond_to_proposals(incoming_proposals)
@@ -445,6 +481,11 @@ class ForwardSession:
 
     async def _send_message(self, msg: Message) -> None:
         try:
+            if self._binary:
+                self._writer.write(encode_fa(msg.subject, msg.body))
+                await self._writer.drain()
+                self._sent += 1
+                return
             body = msg.body.replace("\r\n", "\n").replace("\r", "\n")
             if "\x1a" in body:
                 raise ValueError("message body contains FBB end marker")
@@ -466,21 +507,25 @@ class ForwardSession:
 
     async def _receive_message(self, prop: Proposal) -> None:
         try:
-            subject = await self._readline()
-            body_lines = []
-            body_bytes = 0
-            while True:
-                line = await self._readline()
-                if line == "\x1a":
-                    break
-                body_bytes += len(line.encode("ascii", errors="replace")) + 2
-                if body_bytes > _MAX_MSG_BYTES:
-                    raise ValueError("incoming FBB message exceeds forwarding limit")
-                body_lines.append(line)
+            if self._binary:
+                subject, body = await decode_fa(self._reader, max_body=_MAX_MSG_BYTES)
+            else:
+                subject = await self._readline()
+                body_lines = []
+                body_bytes = 0
+                while True:
+                    line = await self._readline()
+                    if line == "\x1a":
+                        break
+                    body_bytes += len(line.encode("ascii", errors="replace")) + 2
+                    if body_bytes > _MAX_MSG_BYTES:
+                        raise ValueError("incoming FBB message exceeds forwarding limit")
+                    body_lines.append(line)
+                body = "\n".join(body_lines)
             msg = Message(
                 bid=prop.bid, msg_type=prop.msg_type, from_call=prop.from_call,
                 to_call=prop.to_call, at_bbs=prop.at_bbs,
-                subject=subject, body="\n".join(body_lines),
+                subject=subject, body=body,
             )
 
             # Avoid duplicates

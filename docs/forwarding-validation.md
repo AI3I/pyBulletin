@@ -3,15 +3,20 @@
 The automated TCP test in `tests/test_forward_integration.py` exchanges mail
 between two pyBulletin nodes. It verifies session ordering, BID duplicate
 handling, per-neighbor delivery state, schema upgrade, and backup restoration.
-It does **not** establish interoperability with BPQ32 or LinBPQ. Run the checks
+The local TCP lab has also exchanged a bulletin and private messages in both
+directions with LinBPQ 6.0.26.1 using compressed B0. Run the remaining checks
 below before treating a BPQ link or an RF path as production-ready.
+
+For a local TCP-only LinBPQ instance, see the [LinBPQ lab](linbpq-lab.md).
 
 ## Prepare
 
 1. Back up the live database with `python scripts/backup.py --config config/pybulletin.toml --dest /path/to/backups`.
 2. Configure both ends with distinct callsigns. Add the BPQ callsign to
-   `[[forward.neighbor]]` and enable FBB ASCII forwarding on BPQ. Set
-   `protocol = "ascii"` and `inbound_host` to BPQ's source IP when BPQ's SID
+   `[[forward.neighbor]]` and enable FBB Blocked, Allow Binary, and B1 in
+   BPQ's per-BBS forwarding record. Set
+   `protocol = "b0"`, TCP login credentials when using BPQ FBBPORT, and
+   `inbound_host` to BPQ's source IP when BPQ's SID
    omits the BBS callsign.
    Restart `pybulletin.service` after changing neighbor configuration in the
    web console so the core listener and scheduler load the new settings.

@@ -164,6 +164,9 @@ class ForwardNeighborConfig:
     call: str = ""
     # TCP address as "host:port", or AX.25 callsign for RF connect
     address: str = ""
+    # Optional credentials for a BPQ-style TCP FBBPORT login.
+    login_user: str = ""
+    login_password: str = ""
     # Exact source IP accepted for inbound peers whose SID omits their callsign.
     inbound_host: str = ""
     # Active wire format. Legacy b1/b2 values are read but ASCII is used.
@@ -368,6 +371,10 @@ def _build_neighbor(d: dict) -> ForwardNeighborConfig:
         object.__setattr__(c, "call", str(d["call"]).upper())
     if "address" in d:
         object.__setattr__(c, "address", str(d["address"]))
+    if "login_user" in d:
+        object.__setattr__(c, "login_user", str(d["login_user"]))
+    if "login_password" in d:
+        object.__setattr__(c, "login_password", str(d["login_password"]))
     if "inbound_host" in d:
         object.__setattr__(c, "inbound_host", str(d["inbound_host"]))
     if "protocol" in d:
@@ -476,6 +483,10 @@ def save_config(config: AppConfig, path: str) -> None:
         lines.append(f'call       = "{n.call}"\n')
         escaped_addr = n.address.replace("\\", "\\\\").replace('"', '\\"')
         lines.append(f'address    = "{escaped_addr}"\n')
+        escaped_user = n.login_user.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_password = n.login_password.replace("\\", "\\\\").replace('"', '\\"')
+        lines.append(f'login_user = "{escaped_user}"\n')
+        lines.append(f'login_password = "{escaped_password}"\n')
         lines.append(f'inbound_host = "{n.inbound_host}"\n')
         lines.append(f'protocol   = "{n.protocol}"\n')
         lines.append(f'schedule   = "{n.schedule}"\n')
@@ -484,6 +495,10 @@ def save_config(config: AppConfig, path: str) -> None:
         lines.append(f'bin_mode   = {"true" if n.bin_mode else "false"}\n')
         lines.append(f'enabled    = {"true" if n.enabled else "false"}\n')
 
+    # TCP peer passwords are stored here, so restrict the override file even
+    # when an older installation created it with a permissive mode.
+    local.touch(mode=0o600, exist_ok=True)
+    local.chmod(0o600)
     local.write_text("".join(lines), encoding="utf-8")
 
 

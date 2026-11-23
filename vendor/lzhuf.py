@@ -1,6 +1,6 @@
 """Pure-Python LZHUF (Okumura/Yoshizaki) compression.
 
-Used by the FBB B2F forwarding protocol to compress message bodies.
+Used by FBB compressed forwarding to compress message bodies.
 
 Reference implementation: lzhuf.c by Haruhiko Okumura and Haruyasu Yoshizaki.
 Algorithm: LZ77 sliding-window + adaptive Huffman coding.
@@ -18,8 +18,8 @@ import struct
 # Constants (must match the C reference exactly for interoperability)
 # ---------------------------------------------------------------------------
 
-N         = 4096    # sliding window size
-F         = 18      # maximum match length
+N         = 2048    # FBB/BPQ sliding window size
+F         = 60      # FBB/BPQ maximum match length
 THRESHOLD = 2       # minimum match length to encode as reference
 NIL       = N       # sentinel for binary tree
 
@@ -28,6 +28,38 @@ N_CHAR  = 256 - THRESHOLD + F   # 269 — number of symbol codes
 T       = N_CHAR * 2 - 1        # size of Huffman tree table
 R       = T - 1                 # position of root
 MAX_FREQ = 0x8000                # rescale when freq[R] reaches this
+
+# FBB/Okumura position codes. The high six bits use a variable-length
+# prefix; the low six bits are literal. A raw twelve-bit position is not
+# interoperable with LinBPQ's LZHUF decoder.
+_POSITION_LENGTHS = ([3] + [4] * 3 + [5] * 8 + [6] * 12
+                     + [7] * 24 + [8] * 16)
+_POSITION_CODES = ([0x00, 0x20, 0x30, 0x40, 0x50, 0x58, 0x60, 0x68,
+                    0x70, 0x78, 0x80, 0x88, 0x90, 0x94, 0x98, 0x9C,
+                    0xA0, 0xA4, 0xA8, 0xAC, 0xB0, 0xB4, 0xB8, 0xBC]
+                   + list(range(0xC0, 0xF0, 2))
+                   + list(range(0xF0, 0x100)))
+_POSITION_DECODE = {
+    (length, code >> (8 - length)): upper
+    for upper, (length, code) in enumerate(zip(_POSITION_LENGTHS, _POSITION_CODES))
+}
+
+
+def _write_position(writer: "_BitWriter", offset: int) -> None:
+    upper = offset >> 6
+    length = _POSITION_LENGTHS[upper]
+    writer.write_bits(_POSITION_CODES[upper] >> (8 - length), length)
+    writer.write_bits(offset & 0x3f, 6)
+
+
+def _read_position(reader: "_BitReader") -> int:
+    prefix = 0
+    for length in range(1, 9):
+        prefix = (prefix << 1) | reader.read_bit()
+        upper = _POSITION_DECODE.get((length, prefix))
+        if upper is not None:
+            return (upper << 6) | reader.read_bits(6)
+    raise ValueError("invalid LZHUF position code")
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +178,7 @@ class _HuffmanTree:
             self._rescale()
 
         c = prnt[c + T]
-        while c != R:
+        while c != 0:
             freq[c] += 1
             k = c + 1
             if freq[k] < freq[c]:
@@ -210,22 +242,17 @@ class _HuffmanTree:
 
     def encode_char(self, c: int, writer: _BitWriter) -> None:
         """Write the Huffman code for symbol *c*."""
-        son      = self.son
         prnt     = self.prnt
-        sym_node = c          # save original symbol index
         bits: list[int] = []
-        cur  = prnt[sym_node + T]
-        prev = sym_node + T
+        cur = prnt[c + T]
         while True:
-            # bit = 0 if prev is left child (son[cur]), 1 if right child
-            bits.append(0 if son[cur] == prev else 1)
+            bits.append(cur & 1)
+            cur = prnt[cur]
             if cur == R:
                 break
-            prev = cur
-            cur  = prnt[cur]
         for b in reversed(bits):
             writer.write_bit(b)
-        self.update(sym_node)
+        self.update(c)
 
     def decode_char(self, reader: _BitReader) -> int:
         """Read bits until a leaf is reached; return the symbol."""
@@ -381,11 +408,7 @@ def compress(data: bytes) -> bytes:
             tree.encode_char(buf[r], writer)
         else:
             tree.encode_char(255 - THRESHOLD + tb.match_len, writer)
-            writer.write_bits(
-                (r - tb.match_pos - 1) % N,
-                # Number of bits needed for N
-                12,
-            )
+            _write_position(writer, (r - tb.match_pos - 1) % N)
 
         last_match_len = tb.match_len
         for _ in range(last_match_len):
@@ -441,7 +464,7 @@ def decompress(data: bytes, original_size: int | None = None) -> bytes:
             count += 1
         else:
             match_len = c - 255 + THRESHOLD
-            match_pos = (r - reader.read_bits(12) - 1) % N
+            match_pos = (r - _read_position(reader) - 1) % N
             for k in range(match_len):
                 c = buf[(match_pos + k) % N]
                 out.append(c)

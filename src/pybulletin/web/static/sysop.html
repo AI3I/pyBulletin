@@ -328,7 +328,18 @@
         <label>Forwarding format</label>
         <select id="nbr-protocol">
           <option value="ascii">FBB ASCII</option>
+          <option value="b0">FBB compressed (B0)</option>
         </select>
+      </div>
+    </div>
+    <div class="form-row-inline">
+      <div class="form-row">
+        <label>TCP login user (BPQ FBBPORT)</label>
+        <input type="text" id="nbr-login-user" autocomplete="off" placeholder="optional">
+      </div>
+      <div class="form-row">
+        <label>TCP login password</label>
+        <input type="password" id="nbr-login-password" autocomplete="new-password" placeholder="leave blank to keep current">
       </div>
     </div>
     <div class="form-row-inline">

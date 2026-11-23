@@ -6,11 +6,60 @@ import sqlite3
 
 import pytest
 
-from pybulletin.config import AppConfig, ForwardNeighborConfig
+from pybulletin.config import AppConfig, ForwardNeighborConfig, load_config, save_config
 from pybulletin.ax25.router import AX25Router
 from pybulletin.forward.session import ForwardSession, inbound_neighbor, _WireReader
+from pybulletin.forward.binary import encode_fa, decode_fa
+from pybulletin.forward.protocol import lzhuf_compress, lzhuf_decompress
 from pybulletin.store.models import Message, MSG_BULLETIN, MSG_PRIVATE
 from pybulletin.store.store import BBSStore
+
+
+def test_lzhuf_matches_linbpq_reference_vector():
+    original = b"Hello from pyBulletin\r\n"
+    reference = bytes.fromhex(
+        "17000000ea7c7f187fbd67cbfd85f9c1fe02f3806ddcc400fafeb33960"
+    )
+    assert lzhuf_compress(original) == reference
+    assert lzhuf_decompress(reference) == original
+    repeated_reference = bytes.fromhex("5a000000e6f3b9fcd0152008")
+    assert lzhuf_decompress(repeated_reference) == b"ABC" * 30
+
+
+async def test_fbb_b0_frame_roundtrip_and_checksum():
+    frame = encode_fa("Subject", "Hello from pyBulletin")
+    reader = asyncio.StreamReader()
+    reader.feed_data(frame)
+    reader.feed_eof()
+    assert await decode_fa(reader) == ("Subject", "Hello from pyBulletin")
+
+    damaged = frame[:-1] + bytes([frame[-1] ^ 1])
+    reader = asyncio.StreamReader()
+    reader.feed_data(damaged)
+    reader.feed_eof()
+    with pytest.raises(ValueError, match="checksum"):
+        await decode_fa(reader)
+
+    long_body = "\n".join(f"{i:04x} {i*i:08x} LinBPQ and FBB" for i in range(100))
+    reader = asyncio.StreamReader()
+    reader.feed_data(encode_fa("Multiblock", long_body))
+    reader.feed_eof()
+    assert await decode_fa(reader) == ("Multiblock", long_body)
+
+
+def test_bpq_tcp_credentials_config_roundtrip(tmp_path):
+    base = tmp_path / "pybulletin.toml"
+    base.write_text("", encoding="utf-8")
+    cfg = AppConfig()
+    cfg.forward.neighbors = [ForwardNeighborConfig(
+        call="N0CALL", address="127.0.0.1:18011",
+        login_user="lab", login_password='pa\\ss"word',
+    )]
+    save_config(cfg, str(base))
+    assert (tmp_path / "pybulletin.local.toml").stat().st_mode & 0o077 == 0
+    loaded = load_config(str(base))
+    assert loaded.forward.neighbors[0].login_user == "lab"
+    assert loaded.forward.neighbors[0].login_password == 'pa\\ss"word'
 
 
 async def test_inbound_peer_policy_and_delivery_status(tmp_path):
@@ -143,6 +192,130 @@ async def test_fbb_ascii_wire_transcript(tmp_path):
         assert transcript[3:7] == [b"News", b"Line one", b"Line two", b"\x1a"]
         assert transcript[7] == b"FF"
         assert msg.id in await store.delivered_message_ids("B1BBB")
+    finally:
+        server.close()
+        await server.wait_closed()
+        await store.close()
+
+
+async def test_bpq_fbbport_login_and_banner(tmp_path):
+    store = BBSStore(str(tmp_path / "bpq-login.db"))
+    cfg = AppConfig()
+    cfg.node.node_call = "N1CALL"
+    transcript = []
+
+    async def bpq_peer(reader, writer):
+        wire = _WireReader(reader)
+        transcript.append((await wire.readline()).strip())
+        transcript.append((await wire.readline()).strip())
+        writer.write(b"BPQLAB:N0CALL-7} Connected to BBS\r")
+        writer.write(b"[BPQ-6.0.26.1-B2FWIHJM$]\r>\r")
+        await writer.drain()
+        transcript.append((await wire.readline()).strip())
+        transcript.append((await wire.readline()).strip())
+        writer.write(b"FQ\r")
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_server(bpq_peer, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    neighbor = ForwardNeighborConfig(
+        call="N0CALL", address=f"127.0.0.1:{port}",
+        login_user="lab", login_password="labpass",
+    )
+    try:
+        assert await asyncio.wait_for(ForwardSession(cfg, store, neighbor).run_outgoing(), 5) == (0, 0)
+        assert transcript[:2] == [b"lab", b"labpass"]
+        assert transcript[2].startswith(b"[N1CALL-pyBulletin")
+        assert transcript[3] == b"FF"
+    finally:
+        server.close()
+        await server.wait_closed()
+        await store.close()
+
+
+async def test_bpq_b0_compressed_forwarding(tmp_path):
+    store = BBSStore(str(tmp_path / "bpq-b0.db"))
+    cfg = AppConfig()
+    cfg.node.node_call = "N1CALL"
+    msg = Message(msg_type=MSG_BULLETIN, from_call="N1CALL", to_call="WW",
+                  at_bbs="WW", subject="BPQ live test", body="Hello from pyBulletin")
+    await store.insert_message(msg)
+    seen = {}
+
+    async def bpq_peer(reader, writer):
+        wire = _WireReader(reader)
+        assert (await wire.readline()).strip() == b"lab"
+        assert (await wire.readline()).strip() == b"labpass"
+        writer.write(b"BPQLAB:N0CALL-7} Connected to BBS\r")
+        writer.write(b"[BPQ-6.0.26.1-B1FWIHJM$]\rde N0CALL>\r")
+        await writer.drain()
+        seen["sid"] = (await wire.readline()).strip()
+        seen["proposal"] = (await wire.readline()).strip()
+        end = (await wire.readline()).strip()
+        assert end.startswith(b"F> ")
+        assert (sum(seen["proposal"] + b"\r") + int(end[3:], 16)) & 0xff == 0
+        writer.write(b"FS +\r")
+        await writer.drain()
+        seen["message"] = await decode_fa(wire)
+        writer.write(b"FF\r")
+        await writer.drain()
+        assert (await wire.readline()).strip() == b"FF"
+        writer.write(b"FQ\r")
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_server(bpq_peer, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    neighbor = ForwardNeighborConfig(call="N0CALL", address=f"127.0.0.1:{port}",
+                                     login_user="lab", login_password="labpass", protocol="b0")
+    try:
+        assert await asyncio.wait_for(ForwardSession(cfg, store, neighbor).run_outgoing(), 5) == (1, 0)
+        assert b"-BFH$]" in seen["sid"]
+        assert seen["proposal"].startswith(b"FA B N1CALL WW WW ")
+        assert seen["message"] == ("BPQ live test", "Hello from pyBulletin")
+        assert msg.id in await store.delivered_message_ids("N0CALL")
+    finally:
+        server.close()
+        await server.wait_closed()
+        await store.close()
+
+
+async def test_bpq_b0_reverse_forwarding_and_proposal_checksum(tmp_path):
+    store = BBSStore(str(tmp_path / "bpq-reverse.db"))
+    cfg = AppConfig()
+    cfg.node.node_call = "N1CALL"
+
+    async def bpq_peer(reader, writer):
+        wire = _WireReader(reader)
+        await wire.readline()  # login user
+        await wire.readline()  # password
+        writer.write(b"[BPQ-6.0.26.1-B1FWIHJM$]\rde N0CALL>\r")
+        await writer.drain()
+        assert b"-BFH$]" in (await wire.readline())
+        assert (await wire.readline()).strip() == b"FF"
+        proposal = b"FA P N0CALL N1CALL N1CALL BPQTEST01 18\r"
+        checksum = -sum(proposal) & 0xff
+        writer.write(proposal + f"F> {checksum:02X}\r".encode())
+        await writer.drain()
+        assert (await wire.readline()).strip() == b"FS +"
+        writer.write(encode_fa("Reverse", "Hello from LinBPQ"))
+        await writer.drain()
+        assert (await wire.readline()).strip() == b"FF"
+        writer.write(b"FQ\r")
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_server(bpq_peer, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    neighbor = ForwardNeighborConfig(call="N0CALL", address=f"127.0.0.1:{port}",
+                                     login_user="lab", login_password="labpass", protocol="b0")
+    try:
+        assert await asyncio.wait_for(ForwardSession(cfg, store, neighbor).run_outgoing(), 5) == (0, 1)
+        messages = await store.list_messages()
+        assert len(messages) == 1
+        assert (messages[0].bid, messages[0].subject, messages[0].body) == (
+            "BPQTEST01", "Reverse", "Hello from LinBPQ")
     finally:
         server.close()
         await server.wait_closed()

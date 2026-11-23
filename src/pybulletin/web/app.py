@@ -603,6 +603,8 @@ class WebApp:
                 # Config fields
                 "call":       cfg.call,
                 "address":    cfg.address,
+                "login_user": cfg.login_user,
+                "has_login_password": bool(cfg.login_password),
                 "inbound_host": cfg.inbound_host,
                 "protocol":   cfg.protocol,
                 "schedule":   cfg.schedule,
@@ -645,7 +647,7 @@ class WebApp:
         from ..config import ForwardNeighborConfig
         n = ForwardNeighborConfig()
         object.__setattr__(n, "call", call)
-        for field in ("address", "inbound_host", "protocol", "schedule"):
+        for field in ("address", "inbound_host", "protocol", "schedule", "login_user", "login_password"):
             if field in body:
                 object.__setattr__(n, field, str(body[field]))
         if "categories" in body:
@@ -669,9 +671,13 @@ class WebApp:
             body = json.loads(req.body)
         except json.JSONDecodeError:
             return HTTPResponse.bad_request("Invalid JSON")
-        for field in ("address", "inbound_host", "protocol", "schedule"):
+        for field in ("address", "inbound_host", "protocol", "schedule", "login_user"):
             if field in body:
                 object.__setattr__(n, field, str(body[field]))
+        if body.get("login_password"):
+            object.__setattr__(n, "login_password", str(body["login_password"]))
+        if body.get("clear_login_password") is True:
+            object.__setattr__(n, "login_password", "")
         if "categories" in body:
             object.__setattr__(n, "categories", [str(x).upper() for x in body["categories"]])
         if "bin_mode" in body:
