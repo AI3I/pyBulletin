@@ -882,22 +882,50 @@ class BBSStore:
 
     async def upsert_wp_entry(self, entry: WPEntry) -> None:
         async with self._lock:
-            self._conn.execute(
-                """
-                INSERT INTO wp_entries (call, home_bbs, name, updated_at, source_bbs)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(call) DO UPDATE SET
-                  home_bbs   = excluded.home_bbs,
-                  name       = excluded.name,
-                  updated_at = excluded.updated_at,
-                  source_bbs = excluded.source_bbs
-                """,
-                (
-                    entry.call.upper(), entry.home_bbs, entry.name,
-                    _to_epoch(entry.updated_at), entry.source_bbs,
-                ),
-            )
+            self._write_wp_entry(entry)
             self._conn.commit()
+
+    def _write_wp_entry(self, entry: WPEntry) -> None:
+        """Write a WP row while the store lock is held by the caller."""
+        self._conn.execute(
+            """
+            INSERT INTO wp_entries (call, home_bbs, name, updated_at, source_bbs)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(call) DO UPDATE SET
+              home_bbs   = excluded.home_bbs,
+              name       = excluded.name,
+              updated_at = excluded.updated_at,
+              source_bbs = excluded.source_bbs
+            """,
+            (
+                entry.call.upper(), entry.home_bbs, entry.name,
+                _to_epoch(entry.updated_at), entry.source_bbs,
+            ),
+        )
+
+    async def save_wp_profile_edit(
+        self, call: str, *, user_updates: dict[str, str], wp_entry: WPEntry | None
+    ) -> None:
+        """Commit profile and WP changes together or roll both parts back."""
+        allowed = {"display_name", "home_bbs", "locator", "city", "zip_code"}
+        if set(user_updates) - allowed:
+            raise ValueError("unsupported user profile field")
+        call = call.upper()
+        if wp_entry is not None and wp_entry.call.upper() != call:
+            raise ValueError("WP entry callsign does not match profile")
+        async with self._lock:
+            with self._conn:
+                if user_updates:
+                    fields = sorted(user_updates)
+                    assignments = ", ".join(f"{field} = ?" for field in fields)
+                    cur = self._conn.execute(
+                        f"UPDATE users SET {assignments} WHERE call = ?",
+                        [*(user_updates[field] for field in fields), call],
+                    )
+                    if cur.rowcount != 1:
+                        raise ValueError(f"local user {call} no longer exists")
+                if wp_entry is not None:
+                    self._write_wp_entry(wp_entry)
 
     async def list_wp_entries(self, limit: int | None = None) -> list[WPEntry]:
         sql = "SELECT * FROM wp_entries ORDER BY call"

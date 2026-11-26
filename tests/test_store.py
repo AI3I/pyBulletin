@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
+import sqlite3
 
 import pytest
 
@@ -334,6 +335,23 @@ async def test_wp_upsert_updates(store: BBSStore):
     await store.upsert_wp_entry(WPEntry(call="W1UP", home_bbs="NEW"))
     fetched = await store.get_wp_entry("W1UP")
     assert fetched.home_bbs == "NEW"
+
+
+async def test_wp_profile_edit_rolls_back_user_if_wp_write_fails(store: BBSStore):
+    await store.record_login("W1WP", "peer")
+    await store.upsert_wp_entry(WPEntry(call="W1WP", name="Old", home_bbs="W3OLD"))
+    store._conn.execute(
+        "CREATE TRIGGER reject_wp_edit BEFORE UPDATE ON wp_entries "
+        "BEGIN SELECT RAISE(ABORT, 'simulated WP failure'); END"
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        await store.save_wp_profile_edit(
+            "W1WP", user_updates={"display_name": "New"},
+            wp_entry=WPEntry(call="W1WP", name="New", home_bbs="W3NEW"),
+        )
+    assert (await store.get_user("W1WP")).display_name == ""
+    entry = await store.get_wp_entry("W1WP")
+    assert (entry.name, entry.home_bbs) == ("Old", "W3OLD")
 
 
 async def test_search_wp_by_call(store: BBSStore):

@@ -64,12 +64,14 @@ Command set:
 from __future__ import annotations
 
 import logging
+import re
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .. import __version__
-from ..auth import hash_password, verify_password
+from ..auth import hash_password, is_valid_call, verify_password
 from ..store.models import (
     Message, FileEntry,
     MSG_BULLETIN, MSG_NTS, MSG_PRIVATE,
@@ -88,6 +90,20 @@ LOG = logging.getLogger(__name__)
 
 # Maximum lines collected during message compose
 _MAX_BODY_LINES = 500
+
+
+def _profile_field_error(key: str, value: str) -> str | None:
+    """Validate terminal profile input before it reaches the user or WP tables."""
+    limits = {"name": 40, "home_bbs": 12, "locator": 6, "city": 40, "zip_code": 10}
+    if len(value) > limits[key] or not value.isprintable():
+        return f"Invalid {key.replace('_', ' ')}: use at most {limits[key]} printable characters."
+    if key == "home_bbs" and value:
+        ssid = value.rpartition("-")[2] if "-" in value else ""
+        if not is_valid_call(value) or (ssid and int(ssid) > 15):
+            return "Invalid home BBS callsign."
+    if key == "locator" and value and not re.fullmatch(r"[A-R]{2}[0-9]{2}(?:[A-X]{2})?", value):
+        return "Invalid locator: use a 4- or 6-character grid."
+    return None
 
 
 class CommandEngine:
@@ -620,15 +636,15 @@ class CommandEngine:
         user = self._user
 
         if args.strip():
-            name = args.strip()[:40]
+            name = args.strip()
         else:
             await self._s.send(self._st.get("profile.prompt", field="Name", current=user.display_name or ""))
-            name = (await self._s._readline()).strip()[:40]
+            name = (await self._s._readline()).strip()
             if not name:
                 return
-
-        user.display_name = name
-        await self._store.upsert_user(user)
+        if error := _profile_field_error("name", name):
+            await self._s.send(f"\r\n  {error}\r\n")
+            return
 
         # Update White Pages
         from ..store.models import WPEntry
@@ -636,7 +652,16 @@ class CommandEngine:
         wp.name     = name
         wp.home_bbs = user.home_bbs or self._cfg.node.node_call
         wp.source_bbs = self._cfg.node.node_call
-        await self._store.upsert_wp_entry(wp)
+        wp.updated_at = datetime.now(timezone.utc)
+        try:
+            await self._store.save_wp_profile_edit(
+                user.call, user_updates={"display_name": name}, wp_entry=wp,
+            )
+        except (ValueError, sqlite3.Error) as exc:
+            LOG.warning("session: profile name save for %s failed: %s", user.call, exc)
+            await self._s.send("\r\n  Could not save profile. No changes saved.\r\n")
+            return
+        user.display_name = name
 
         await self._s.send(self._st.get("profile.set", field="Name", value=name))
         LOG.info("session: %s set display_name=%r", user.call, name)
@@ -650,12 +675,16 @@ class CommandEngine:
         user = self._user
 
         if args.strip():
-            locator = args.strip().upper()[:6]
+            locator = args.strip().upper()
         else:
             await self._s.send(self._st.get("profile.prompt", field="Locator", current=user.locator or ""))
-            locator = (await self._s._readline()).strip().upper()[:6]
+            locator = (await self._s._readline()).strip().upper()
             if not locator:
                 return
+
+        if error := _profile_field_error("locator", locator):
+            await self._s.send(f"\r\n  {error}\r\n")
+            return
 
         user.locator = locator
         await self._store.upsert_user(user)
@@ -670,12 +699,15 @@ class CommandEngine:
         """NQ <city> — set your city / QTH description."""
         user = self._user
         if args.strip():
-            city = args.strip()[:40]
+            city = args.strip()
         else:
             await self._s.send(self._st.get("profile.prompt", field="QTH", current=user.city or ""))
-            city = (await self._s._readline()).strip()[:40]
+            city = (await self._s._readline()).strip()
             if not city:
                 return
+        if error := _profile_field_error("city", city):
+            await self._s.send(f"\r\n  {error}\r\n")
+            return
         user.city = city
         await self._store.upsert_user(user)
         await self._s.send(self._st.get("profile.set", field="QTH", value=city))
@@ -689,12 +721,15 @@ class CommandEngine:
         """NZ <zip> — set your ZIP / postal code."""
         user = self._user
         if args.strip():
-            zip_code = args.strip()[:10]
+            zip_code = args.strip()
         else:
             await self._s.send(self._st.get("profile.prompt", field="ZIP", current=user.zip_code or ""))
-            zip_code = (await self._s._readline()).strip()[:10]
+            zip_code = (await self._s._readline()).strip()
             if not zip_code:
                 return
+        if error := _profile_field_error("zip_code", zip_code):
+            await self._s.send(f"\r\n  {error}\r\n")
+            return
         user.zip_code = zip_code
         await self._store.upsert_user(user)
         await self._s.send(self._st.get("profile.set", field="ZIP", value=zip_code))
@@ -708,20 +743,31 @@ class CommandEngine:
         """NB [call] — set your home BBS callsign."""
         user = self._user
         if args.strip():
-            home = args.strip().upper()[:12]
+            home = args.strip().upper()
         else:
             await self._s.send(self._st.get("profile.prompt", field="Home BBS", current=user.home_bbs or ""))
-            home = (await self._s._readline()).strip().upper()[:12]
+            home = (await self._s._readline()).strip().upper()
             if not home:
                 return
-        user.home_bbs = home
-        await self._store.upsert_user(user)
+        if error := _profile_field_error("home_bbs", home):
+            await self._s.send(f"\r\n  {error}\r\n")
+            return
         # Update White Pages
         from ..store.models import WPEntry
         wp = await self._store.get_wp_entry(user.call) or WPEntry(call=user.call)
         wp.home_bbs   = home
+        wp.name = wp.name or user.display_name
         wp.source_bbs = self._cfg.node.node_call
-        await self._store.upsert_wp_entry(wp)
+        wp.updated_at = datetime.now(timezone.utc)
+        try:
+            await self._store.save_wp_profile_edit(
+                user.call, user_updates={"home_bbs": home}, wp_entry=wp,
+            )
+        except (ValueError, sqlite3.Error) as exc:
+            LOG.warning("session: profile BBS save for %s failed: %s", user.call, exc)
+            await self._s.send("\r\n  Could not save profile. No changes saved.\r\n")
+            return
+        user.home_bbs = home
         await self._s.send(self._st.get("profile.set", field="Home BBS", value=home))
         LOG.info("session: %s set home_bbs=%r", user.call, home)
 
@@ -1905,7 +1951,6 @@ class CommandEngine:
         if not call:
             await self._s.send("\r\n  Usage: IE <callsign>\r\n")
             return
-        from ..auth import is_valid_call
         if not is_valid_call(call):
             await self._s.send("\r\n  Invalid callsign.\r\n")
             return
@@ -1947,22 +1992,33 @@ class CommandEngine:
         if not changed:
             await self._s.send("\r\n  No changes made.\r\n")
             return
+        for key, _ in labels:
+            if key not in changed:
+                continue
+            error = _profile_field_error(key, edited[key])
+            if error:
+                await self._s.send(f"\r\n  {error} No changes saved.\r\n")
+                return
+
+        user_updates: dict[str, str] = {}
         if user is not None:
-            if "name" in changed:
-                user.display_name = edited["name"]
-            if "home_bbs" in changed:
-                user.home_bbs = edited["home_bbs"]
-            for key in ("locator", "city", "zip_code"):
-                if key in changed:
-                    setattr(user, key, edited[key])
-            await self._store.upsert_user(user)
+            user_fields = {"name": "display_name", "home_bbs": "home_bbs",
+                           "locator": "locator", "city": "city", "zip_code": "zip_code"}
+            user_updates = {user_fields[key]: edited[key] for key in changed}
+        wp_edit = None
         if changed & {"name", "home_bbs"}:
-            entry = entry or WPEntry(call=call)
-            entry.name = edited["name"]
-            entry.home_bbs = edited["home_bbs"]
-            entry.updated_at = datetime.now(timezone.utc)
-            entry.source_bbs = self._cfg.node.node_call
-            await self._store.upsert_wp_entry(entry)
+            wp_edit = WPEntry(
+                call=call, name=edited["name"], home_bbs=edited["home_bbs"],
+                source_bbs=self._cfg.node.node_call, updated_at=datetime.now(timezone.utc),
+            )
+        try:
+            await self._store.save_wp_profile_edit(
+                call, user_updates=user_updates, wp_entry=wp_edit,
+            )
+        except (ValueError, sqlite3.Error) as exc:
+            LOG.warning("session: WP edit for %s failed: %s", call, exc)
+            await self._s.send("\r\n  Could not save WP edit. No changes saved.\r\n")
+            return
         await self._s.send(f"\r\n  WP record for {call} updated.\r\n")
         LOG.info("session: sysop %s edited WP record for %s", self._user.call, call)
 

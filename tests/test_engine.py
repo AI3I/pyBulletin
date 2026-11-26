@@ -437,6 +437,12 @@ async def test_nb_updates_wp(fake_session, store):
     assert wp.home_bbs == "W3BBS"
 
 
+async def test_nb_rejects_invalid_home_bbs(fake_session, store):
+    assert "Invalid home BBS" in await _dispatch(fake_session, "NB W3BBS-99")
+    assert (await store.get_user("W1TEST")).home_bbs == ""
+    assert await store.get_wp_entry("W1TEST") is None
+
+
 # ---------------------------------------------------------------------------
 # NH — set display name
 # ---------------------------------------------------------------------------
@@ -452,6 +458,17 @@ async def test_nh_updates_wp(fake_session, store):
     wp = await store.get_wp_entry("W1TEST")
     assert wp is not None
     assert wp.name == "Test User"
+
+
+async def test_nh_wp_failure_leaves_profile_and_session_unchanged(fake_session, store):
+    store._conn.execute(
+        "CREATE TRIGGER reject_wp BEFORE INSERT ON wp_entries "
+        "BEGIN SELECT RAISE(ABORT, 'simulated failure'); END"
+    )
+    assert "No changes saved" in await _dispatch(fake_session, "NH Test User")
+    assert (await store.get_user("W1TEST")).display_name == ""
+    assert fake_session.user.display_name == ""
+    assert await store.get_wp_entry("W1TEST") is None
 
 
 # ---------------------------------------------------------------------------
@@ -668,6 +685,23 @@ async def test_ie_creates_wp_without_creating_user(sysop_session, store):
     entry = await store.get_wp_entry("W1NEW")
     assert (entry.name, entry.home_bbs) == ("Alice", "W3BBS")
     assert await store.get_user("W1NEW") is None
+
+
+@pytest.mark.parametrize("inputs", [
+    ("New", "BAD!", "", "", ""),
+    ("New", "W3BBS", "BADGRID", "", ""),
+    ("N" * 41, "W3BBS", "FN00", "", ""),
+])
+async def test_ie_rejects_invalid_fields_without_partial_edit(sysop_session, store, inputs):
+    from pybulletin.store.models import WPEntry
+    await store.record_login("W1LOOK", "peer")
+    await store.upsert_wp_entry(WPEntry(call="W1LOOK", name="Old", home_bbs="W3OLD"))
+    sysop_session.push_input(*inputs)
+    assert "No changes saved" in await _dispatch(sysop_session, "IE W1LOOK")
+    user = await store.get_user("W1LOOK")
+    entry = await store.get_wp_entry("W1LOOK")
+    assert (user.display_name, user.home_bbs, user.locator) == ("", "", "")
+    assert (entry.name, entry.home_bbs) == ("Old", "W3OLD")
 
 
 # ---------------------------------------------------------------------------
