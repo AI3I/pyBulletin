@@ -34,6 +34,11 @@ async def web_running() -> bool:
     return active
 
 
+async def core_running() -> bool:
+    active, _ = await _run("systemctl", "is-active", "pybulletin.service")
+    return active
+
+
 async def set_web(enabled: bool) -> tuple[bool, str]:
     action = "enable" if enabled else "disable"
     return await _run("sudo", "-n", "/usr/bin/systemctl", action, "--now", "pybulletinweb.service")

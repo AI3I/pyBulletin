@@ -214,7 +214,8 @@ or paste a token manually.
 - User management — list users, set privilege (user/sysop), reset passwords, delete accounts
 - White Pages — look up and edit WP entries
 - Neighbor management — view configured forward neighbors and runtime stats
-- Node config — edit `[node]`, `[telnet]`, `[forward]`, and `[retention]` settings live
+- Services — view core/web status and forwarding errors; change public UI, forwarding, beacons, PACTOR, and radio mode after re-entering the SYSOP password
+- Node config — edit node presentation fields; the core restarts to use saved values
 - Statistics dashboard — message counts, connected sessions, forwarding history
 - Live session monitor — see who is connected and on which transport
 

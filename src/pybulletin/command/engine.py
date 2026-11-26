@@ -1425,7 +1425,7 @@ class CommandEngine:
             return
 
         import asyncio
-        from ..config import load_config, save_config
+        from ..config import load_config, update_config
         from .. import sysop_control
 
         parts = args.upper().split()
@@ -1482,8 +1482,20 @@ class CommandEngine:
             await self._cmd_help("SYSOP")
             return
 
+        def apply(current):
+            if feature == "PUBLIC":
+                current.public_web.enabled = enabled
+            elif feature == "FORWARD":
+                current.forward.enabled = enabled
+            elif feature == "BEACON":
+                current.beacon.enabled = enabled
+            elif feature == "PACTOR":
+                current.pactor.enabled = enabled
+            elif feature == "RADIO":
+                current.kiss.transport = cfg.kiss.transport
+
         try:
-            save_config(cfg, cfg.source_path)
+            update_config(cfg.source_path, apply)
         except OSError as exc:
             await self._s.send(f"\r\n  Could not save config: {exc}\r\n")
             return

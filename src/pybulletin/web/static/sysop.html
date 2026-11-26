@@ -16,6 +16,7 @@
     <button onclick="showView('conference')" id="nav-conference">Conferences</button>
     <button onclick="showView('users')"      id="nav-users">Users</button>
     <button onclick="showView('neighbors')"  id="nav-neighbors">Neighbors</button>
+    <button onclick="showView('services')"   id="nav-services">Services</button>
     <button onclick="showView('config')"     id="nav-config">Configuration</button>
   </div>
   <div class="nav-right">
@@ -329,7 +330,7 @@
         <select id="nbr-protocol">
           <option value="ascii">FBB ASCII</option>
           <option value="b0">FBB compressed (B0)</option>
-          <option value="w0rli">Kantronics / W0RLI (HM$)</option>
+          <option value="w0rli">Kantronics / W0RLI (H$)</option>
         </select>
       </div>
     </div>
@@ -391,6 +392,37 @@
         </tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<!-- SERVICES -->
+<div class="view" id="view-services">
+  <div class="section-header">
+    <h2>Services and radio</h2>
+    <button class="btn btn-ghost btn-sm" onclick="loadServices()">↻ Refresh</button>
+  </div>
+  <div class="card">
+    <div class="card-title">Current state</div>
+    <table><tbody id="service-status"><tr><td>Loading…</td></tr></tbody></table>
+  </div>
+  <div class="card">
+    <div class="card-title">Controls</div>
+    <p>Changes to forwarding, beacons, PACTOR, or radio restart the core and disconnect current sessions. Web service shutdown remains available from Telnet with <code>SYSOP WEB OFF</code>.</p>
+    <div class="form-row">
+      <label for="service-password">Current SYSOP password</label>
+      <input type="password" id="service-password" autocomplete="current-password" placeholder="Required for each change">
+    </div>
+    <div class="form-row-inline">
+      <div class="form-row"><label>Public web UI</label><div><button class="btn btn-sm" onclick="setService('PUBLIC','ON')">On</button> <button class="btn btn-sm" onclick="setService('PUBLIC','OFF')">Off</button></div></div>
+      <div class="form-row"><label>Forwarding</label><div><button class="btn btn-sm" onclick="setService('FORWARD','ON')">On</button> <button class="btn btn-sm" onclick="setService('FORWARD','OFF')">Off</button></div></div>
+      <div class="form-row"><label>RF beacons</label><div><button class="btn btn-sm" onclick="setService('BEACON','ON')">On</button> <button class="btn btn-sm" onclick="setService('BEACON','OFF')">Off</button></div></div>
+      <div class="form-row"><label>PACTOR</label><div><button class="btn btn-sm" onclick="setService('PACTOR','ON')">On</button> <button class="btn btn-sm" onclick="setService('PACTOR','OFF')">Off</button></div></div>
+    </div>
+    <div class="form-row-inline">
+      <div class="form-row"><label for="service-radio">Radio mode</label><select id="service-radio"><option value="OFF">Off</option><option value="KISS_SERIAL">Serial KISS</option><option value="KISS_TCP">TCP KISS</option></select></div>
+      <div class="form-row"><label>&nbsp;</label><button class="btn btn-primary btn-sm" onclick="setService('RADIO',document.getElementById('service-radio').value)">Apply radio mode</button></div>
+    </div>
+    <p class="subtle">Configure device paths and KISS TCP host in TOML before enabling those modes. Service changes are written to the journal with your callsign.</p>
   </div>
 </div>
 

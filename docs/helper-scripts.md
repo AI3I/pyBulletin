@@ -69,6 +69,13 @@ in the TOML config over SSH. The installer grants the `pybulletin` service user
 only the systemd operations listed above through
 `/etc/sudoers.d/pybulletin-sysop`. A normal user cannot invoke `SYSOP`.
 
+The web SYSOP console's **Services** page shows the live core/web service state,
+configured forwarding, beacon, PACTOR, and radio mode, and reported forwarding
+errors. It offers the same feature switches except web service shutdown. Each
+web change requires the SYSOP password again and is recorded in the service
+journal. Neighbor and service edits read the latest config under a shared lock;
+neighbor edits restart the core so its scheduler uses the new routes.
+
 Telnet sends credentials in clear text. For remote administration, reach the
 Telnet listener through an SSH tunnel or another trusted path.
 

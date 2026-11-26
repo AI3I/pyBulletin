@@ -117,7 +117,7 @@ function showView(name) {
   if (nb) nb.classList.add("active");
   const loaders = {
     dashboard: loadDashboard, messages: loadMessages,
-    users: loadUsers, neighbors: loadNeighbors, config: loadConfig,
+    users: loadUsers, neighbors: loadNeighbors, services: loadServices, config: loadConfig,
     conference: loadConference,
   };
   if (loaders[name]) loaders[name]();
@@ -601,12 +601,12 @@ async function saveNeighbor() {
       await apiFetch(`/api/neighbors/${editingCall}`, {
         method: "PUT", body: JSON.stringify(body),
       });
-      toast(`Neighbor ${editingCall} updated.`, "success");
+      toast(`Neighbor ${editingCall} updated; core restarting.`, "success");
     } else {
       await apiFetch("/api/neighbors", {
         method: "POST", body: JSON.stringify({ call, ...body }),
       });
-      toast(`Neighbor ${call} added.`, "success");
+      toast(`Neighbor ${call} added; core restarting.`, "success");
     }
     toggleAddNeighbor();
     loadNeighbors();
@@ -618,7 +618,7 @@ async function toggleNeighbor(call, enabled) {
     await apiFetch(`/api/neighbors/${call}`, {
       method: "PUT", body: JSON.stringify({ enabled }),
     });
-    toast(`${call} ${enabled ? "enabled" : "disabled"}.`, "success");
+    toast(`${call} ${enabled ? "enabled" : "disabled"}; core restarting.`, "success");
     loadNeighbors();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -627,7 +627,7 @@ async function deleteNeighbor(call) {
   if (!confirm(`Remove neighbor ${call}? This will delete it from the config.`)) return;
   try {
     await apiFetch(`/api/neighbors/${call}`, { method: "DELETE" });
-    toast(`Neighbor ${call} removed.`, "success");
+    toast(`Neighbor ${call} removed; core restarting.`, "success");
     loadNeighbors();
   } catch (e) { toast(e.message, "error"); }
 }
@@ -643,6 +643,48 @@ async function connectNeighbor(call) {
     }
     loadNeighbors();
   } catch (e) { toast(e.message, "error"); }
+}
+
+// ---------------------------------------------------------------------------
+// Services
+// ---------------------------------------------------------------------------
+async function loadServices() {
+  if (!SESSION) return;
+  try {
+    const state = await apiFetch("/api/sysop/status");
+    const label = value => value ? "on" : "off";
+    const errors = Object.entries(state.forward_errors || {});
+    const rows = [
+      ["Core service", state.core_running ? "running" : "stopped"],
+      ["Web service", state.web],
+      ["Public web UI (configured)", label(state.public)],
+      ["Forwarding (configured)", label(state.forward)],
+      ["RF beacons (configured)", label(state.beacon)],
+      ["PACTOR (configured)", label(state.pactor)],
+      ["Radio mode (configured)", state.radio],
+      ["Forwarding errors", errors.length ? errors.map(([call, error]) => `${call}: ${error}`).join("; ") : "none reported"],
+    ];
+    document.getElementById("service-status").innerHTML = rows.map(([name, value]) =>
+      `<tr><th>${escHtml(name)}</th><td>${escHtml(String(value))}</td></tr>`
+    ).join("");
+    const radio = document.getElementById("service-radio");
+    radio.value = state.radio === "disabled" ? "OFF" : state.radio.toUpperCase();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function setService(feature, action) {
+  const input = document.getElementById("service-password");
+  const password = input.value;
+  if (!password) { toast("Enter your current SYSOP password.", "error"); input.focus(); return; }
+  if (feature !== "PUBLIC" && !confirm(`${feature} ${action} will restart the BBS and disconnect active sessions. Continue?`)) return;
+  try {
+    const result = await apiFetch("/api/sysop/control", {
+      method: "POST", body: JSON.stringify({feature, action, password}),
+    });
+    input.value = "";
+    toast(`${feature} ${action} saved${result.core_restarting ? "; core restarting" : ""}.`, "success");
+    await loadServices();
+  } catch (e) { input.value = ""; toast(e.message, "error"); }
 }
 
 // ---------------------------------------------------------------------------
@@ -689,7 +731,7 @@ async function saveConfig() {
   }
   try {
     await apiFetch("/api/config", { method: "POST", body: JSON.stringify(body) });
-    toast("Configuration saved.", "success");
+    toast("Configuration saved; core restarting.", "success");
   } catch (e) { toast(e.message, "error"); }
 }
 

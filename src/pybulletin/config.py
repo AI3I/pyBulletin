@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
+import fcntl
+import os
 import sys
+import tempfile
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -507,9 +511,30 @@ def save_config(config: AppConfig, path: str) -> None:
 
     # TCP peer passwords are stored here, so restrict the override file even
     # when an older installation created it with a permissive mode.
-    local.touch(mode=0o600, exist_ok=True)
-    local.chmod(0o600)
-    local.write_text("".join(lines), encoding="utf-8")
+    fd, temp_name = tempfile.mkstemp(prefix=f".{local.name}.", dir=local.parent)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            output.write("".join(lines))
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temp_name, local)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
+
+
+def update_config(path: str, change: Callable[[AppConfig], None]) -> AppConfig:
+    """Apply one change to the latest config while other services wait."""
+    with Path(path).open("rb") as base:
+        fcntl.flock(base, fcntl.LOCK_EX)
+        try:
+            config = load_config(path)
+            change(config)
+            save_config(config, path)
+            return config
+        finally:
+            fcntl.flock(base, fcntl.LOCK_UN)
 
 
 def _dict_to_toml(d: dict, prefix: str = "") -> list[str]:

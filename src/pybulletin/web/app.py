@@ -34,6 +34,8 @@ System-operator-only endpoints:
   POST /api/config                   → update config
   GET  /api/wp                       → white pages (query: call)
   GET  /api/stats                    → extended node stats
+  GET  /api/sysop/status             → live service and feature state
+  POST /api/sysop/control            → change one feature after password check
 """
 from __future__ import annotations
 
@@ -99,7 +101,9 @@ class WebApp:
             return await self._health(req)
 
         # --- Root / sysop SPA redirects ---
-        if m == "GET" and p in ("/", ""):
+        if m == "GET" and p in ("/", "/index.html"):
+            if not self._latest_config().public_web.enabled:
+                return HTTPResponse.not_found()
             return self._static("index.html")
         if m == "GET" and p in ("/sysop", "/sysop/"):
             return self._static("sysop.html")
@@ -169,6 +173,10 @@ class WebApp:
             return await self._get_config(req, sess)
         if m == "POST" and p == "/api/config":
             return await self._set_config(req, sess)
+        if m == "GET" and p == "/api/sysop/status":
+            return await self._sysop_status(req, sess)
+        if m == "POST" and p == "/api/sysop/control":
+            return await self._sysop_control(req, sess)
         if m == "GET" and p == "/api/conference":
             return await self._conference_status(req, sess)
 
@@ -592,14 +600,15 @@ class WebApp:
     async def _list_neighbors(self, req: HTTPRequest, sess) -> HTTPResponse:
         if sess is None or not sess.is_sysop:
             return HTTPResponse.forbidden()
+        cfg_current = self._latest_config()
         stats_list = await self._store.list_neighbors()
         stats_map  = {n.call: n for n in stats_list}
         errors = await self._store.forward_errors()
         pending = await self._store.pending_delivery_counts(
-            self._cfg.forward.neighbors, self._cfg.node.node_call,
+            cfg_current.forward.neighbors, cfg_current.node.node_call,
         )
         result = []
-        for cfg in self._cfg.forward.neighbors:
+        for cfg in cfg_current.forward.neighbors:
             st = stats_map.get(cfg.call)
             result.append({
                 # Config fields
@@ -624,13 +633,18 @@ class WebApp:
             })
         return HTTPResponse.json(result)
 
-    def _save_config_async(self) -> None:
-        from ..config import save_config
-        import threading
-        threading.Thread(
-            target=save_config, args=(self._cfg, "config/pybulletin.toml"),
-            daemon=True,
-        ).start()
+    def _latest_config(self):
+        from ..config import load_config
+        try:
+            return load_config(self._cfg.source_path)
+        except FileNotFoundError:
+            return self._cfg
+
+    async def _change_config(self, change):
+        from ..config import update_config
+        cfg = await asyncio.to_thread(update_config, self._cfg.source_path, change)
+        self._cfg = cfg
+        return cfg
 
     async def _add_neighbor(self, req: HTTPRequest, sess) -> HTTPResponse:
         if sess is None or not sess.is_sysop:
@@ -642,10 +656,6 @@ class WebApp:
         call = str(body.get("call", "")).strip().upper()
         if not call:
             return HTTPResponse.bad_request("call required")
-        if any(n.call == call for n in self._cfg.forward.neighbors):
-            return HTTPResponse(status=409,
-                headers={"content-type": "application/json"},
-                body=json.dumps({"error": f"Neighbor {call} already exists"}).encode())
         from ..config import ForwardNeighborConfig
         n = ForwardNeighborConfig()
         object.__setattr__(n, "call", call)
@@ -658,55 +668,76 @@ class WebApp:
             object.__setattr__(n, "bin_mode", bool(body["bin_mode"]))
         if "enabled" in body:
             object.__setattr__(n, "enabled", bool(body["enabled"]))
-        self._cfg.forward.neighbors.append(n)
-        self._save_config_async()
+        def add(cfg):
+            if any(existing.call == call for existing in cfg.forward.neighbors):
+                raise ValueError(f"Neighbor {call} already exists")
+            cfg.forward.neighbors.append(n)
+        try:
+            await self._change_config(add)
+        except ValueError as exc:
+            return HTTPResponse.json({"error": str(exc)}, status=409)
+        from .. import sysop_control
+        asyncio.create_task(sysop_control.restart_core_later())
         LOG.info("web: %s added neighbor %s", sess.call, call)
         return HTTPResponse.json({"call": call}, status=201)
 
     async def _update_neighbor(self, req: HTTPRequest, sess, call: str) -> HTTPResponse:
         if sess is None or not sess.is_sysop:
             return HTTPResponse.forbidden()
-        n = next((x for x in self._cfg.forward.neighbors if x.call == call), None)
-        if n is None:
-            return HTTPResponse.not_found()
         try:
             body = json.loads(req.body)
         except json.JSONDecodeError:
             return HTTPResponse.bad_request("Invalid JSON")
-        for field in ("address", "inbound_host", "protocol", "schedule", "login_user"):
-            if field in body:
-                object.__setattr__(n, field, str(body[field]))
-        if body.get("login_password"):
-            object.__setattr__(n, "login_password", str(body["login_password"]))
-        if body.get("clear_login_password") is True:
-            object.__setattr__(n, "login_password", "")
-        if "categories" in body:
-            object.__setattr__(n, "categories", [str(x).upper() for x in body["categories"]])
-        if "bin_mode" in body:
-            object.__setattr__(n, "bin_mode", bool(body["bin_mode"]))
-        if "enabled" in body:
-            object.__setattr__(n, "enabled", bool(body["enabled"]))
-        self._save_config_async()
+        def update(cfg):
+            n = next((x for x in cfg.forward.neighbors if x.call == call), None)
+            if n is None:
+                raise ValueError("neighbor not found")
+            for field in ("address", "inbound_host", "protocol", "schedule", "login_user"):
+                if field in body:
+                    object.__setattr__(n, field, str(body[field]))
+            if body.get("login_password"):
+                object.__setattr__(n, "login_password", str(body["login_password"]))
+            if body.get("clear_login_password") is True:
+                object.__setattr__(n, "login_password", "")
+            if "categories" in body:
+                object.__setattr__(n, "categories", [str(x).upper() for x in body["categories"]])
+            if "bin_mode" in body:
+                object.__setattr__(n, "bin_mode", bool(body["bin_mode"]))
+            if "enabled" in body:
+                object.__setattr__(n, "enabled", bool(body["enabled"]))
+        try:
+            await self._change_config(update)
+        except ValueError:
+            return HTTPResponse.not_found()
+        from .. import sysop_control
+        asyncio.create_task(sysop_control.restart_core_later())
         LOG.info("web: %s updated neighbor %s", sess.call, call)
         return HTTPResponse.json({"ok": True})
 
     async def _delete_neighbor(self, req: HTTPRequest, sess, call: str) -> HTTPResponse:
         if sess is None or not sess.is_sysop:
             return HTTPResponse.forbidden()
-        before = self._cfg.forward.neighbors
-        after  = [n for n in before if n.call != call]
-        if len(after) == len(before):
+        def delete(cfg):
+            before = cfg.forward.neighbors
+            after = [n for n in before if n.call != call]
+            if len(after) == len(before):
+                raise ValueError("neighbor not found")
+            cfg.forward.neighbors = after
+        try:
+            await self._change_config(delete)
+        except ValueError:
             return HTTPResponse.not_found()
-        object.__setattr__(self._cfg.forward, "neighbors", after)
-        self._save_config_async()
+        from .. import sysop_control
+        asyncio.create_task(sysop_control.restart_core_later())
         LOG.info("web: %s deleted neighbor %s", sess.call, call)
         return HTTPResponse.json({"ok": True})
 
     async def _connect_neighbor(self, req: HTTPRequest, sess, call: str) -> HTTPResponse:
         if sess is None or not sess.is_sysop:
             return HTTPResponse.forbidden()
+        current = self._latest_config()
         neighbor = next(
-            (n for n in self._cfg.forward.neighbors if n.call == call and n.enabled),
+            (n for n in current.forward.neighbors if n.call == call and n.enabled),
             None,
         )
         if neighbor is None:
@@ -716,9 +747,9 @@ class WebApp:
         try:
             if _RF_CALL.fullmatch(neighbor.address.upper()):
                 from ..forward.control import request_connect
-                sent, received = await request_connect(self._cfg, call)
+                sent, received = await request_connect(current, call)
             else:
-                session = ForwardSession(self._cfg, self._store, neighbor)
+                session = ForwardSession(current, self._store, neighbor)
                 sent, received = await session.run_outgoing()
                 await self._store.record_forward_result(call, sent=sent, received=received)
         except Exception as exc:
@@ -754,7 +785,7 @@ class WebApp:
         new_t   = await self._store.count_messages(msg_type=MSG_NTS,      status=STATUS_NEW)
         users   = len(await self._store.list_users())
         wp      = await self._store.count_wp_entries()
-        cfg     = self._cfg
+        cfg     = self._latest_config()
 
         # Recent messages (newest 10)
         recent_msgs = await self._store.list_messages(limit=10, reverse=True)
@@ -810,10 +841,87 @@ class WebApp:
                      for name, members in snapshot.items()}
         return HTTPResponse.json({"available": True, "rooms": rooms_out})
 
+    async def _sysop_status(self, req: HTTPRequest, sess) -> HTTPResponse:
+        if sess is None or not sess.is_sysop:
+            return HTTPResponse.forbidden()
+        from .. import sysop_control
+        cfg = self._latest_config()
+        core, web = await asyncio.gather(
+            sysop_control.core_running(), sysop_control.web_status(),
+        )
+        return HTTPResponse.json({
+            "core_running": core,
+            "web": web,
+            "public": cfg.public_web.enabled,
+            "forward": cfg.forward.enabled,
+            "beacon": cfg.beacon.enabled,
+            "pactor": cfg.pactor.enabled,
+            "radio": cfg.kiss.transport,
+            "forward_errors": await self._store.forward_errors(),
+        })
+
+    async def _sysop_control(self, req: HTTPRequest, sess) -> HTTPResponse:
+        if sess is None or not sess.is_sysop:
+            return HTTPResponse.forbidden()
+        try:
+            body = json.loads(req.body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return HTTPResponse.bad_request("Invalid JSON")
+        feature = str(body.get("feature", "")).upper()
+        action = str(body.get("action", "")).upper()
+        password = str(body.get("password", ""))
+        if feature not in ("PUBLIC", "FORWARD", "BEACON", "PACTOR", "RADIO"):
+            return HTTPResponse.bad_request("Unknown feature")
+        if action not in (("OFF", "KISS_SERIAL", "KISS_TCP") if feature == "RADIO" else ("ON", "OFF")):
+            return HTTPResponse.bad_request("Unknown action")
+        user = await self._store.get_user(sess.call)
+        if user is None or user.privilege != PRIV_SYSOP or not user.password_hash or not verify_password(password, user.password_hash):
+            LOG.warning("web: SYSOP control reauthentication failed for %s", sess.call)
+            return HTTPResponse.bad_request("Current password is incorrect")
+
+        before = self._latest_config()
+        old = (before.kiss.transport if feature == "RADIO" else {
+            "PUBLIC": before.public_web.enabled,
+            "FORWARD": before.forward.enabled,
+            "BEACON": before.beacon.enabled,
+            "PACTOR": before.pactor.enabled,
+        }[feature])
+
+        def change(cfg):
+            enabled = action == "ON"
+            if feature == "PUBLIC":
+                cfg.public_web.enabled = enabled
+            elif feature == "FORWARD":
+                cfg.forward.enabled = enabled
+            elif feature == "BEACON":
+                cfg.beacon.enabled = enabled
+            elif feature == "PACTOR":
+                if enabled and not cfg.pactor.device:
+                    raise ValueError("Configure the PACTOR device first")
+                cfg.pactor.enabled = enabled
+            elif feature == "RADIO":
+                if action == "KISS_SERIAL" and not cfg.kiss.device:
+                    raise ValueError("Configure the serial KISS device first")
+                if action == "KISS_TCP" and not cfg.kiss.tcp_host:
+                    raise ValueError("Configure the KISS TCP host first")
+                cfg.kiss.transport = "disabled" if action == "OFF" else action.lower()
+
+        try:
+            await self._change_config(change)
+        except ValueError as exc:
+            return HTTPResponse.bad_request(str(exc))
+        from .. import sysop_control
+        restart = feature != "PUBLIC"
+        if restart:
+            asyncio.create_task(sysop_control.restart_core_later())
+        LOG.info("web: SYSOP %s changed %s from %s to %s", sess.call, feature, old, action)
+        return HTTPResponse.json({"ok": True, "core_restarting": restart})
+
     async def _get_config(self, req: HTTPRequest, sess) -> HTTPResponse:
         if sess is None or not sess.is_sysop:
             return HTTPResponse.forbidden()
-        cfg = self._cfg.node
+        current = self._latest_config()
+        cfg = current.node
         return HTTPResponse.json({
             "node_call":    cfg.node_call,
             "node_alias":   cfg.node_alias,
@@ -825,7 +933,7 @@ class WebApp:
             "welcome_title":cfg.welcome_title,
             "welcome_body": cfg.welcome_body,
             "login_tip":    cfg.login_tip,
-            "require_password": self._cfg.node.require_password,
+            "require_password": current.node.require_password,
         })
 
     async def _set_config(self, req: HTTPRequest, sess) -> HTTPResponse:
@@ -840,11 +948,14 @@ class WebApp:
             "motd", "welcome_title", "welcome_body", "login_tip",
             "owner_name", "qth", "node_locator", "branding_name",
         }
-        cfg = self._cfg.node
-        for k, v in body.items():
-            if k in _ALLOWED:
-                object.__setattr__(cfg, k, str(v))
-        self._save_config_async()
+        def edit(cfg):
+            for k, v in body.items():
+                if k in _ALLOWED:
+                    object.__setattr__(cfg.node, k, str(v))
+        await self._change_config(edit)
+        from .. import sysop_control
+        asyncio.create_task(sysop_control.restart_core_later())
+        LOG.info("web: %s updated node presentation", sess.call)
         return HTTPResponse.json({"ok": True})
 
 
