@@ -1,6 +1,8 @@
 """Tests for CommandEngine — dispatch, key command handlers via FakeSession."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from pybulletin.command.engine import CommandEngine
@@ -253,6 +255,16 @@ async def test_list_last(fake_session, store):
     out = await _dispatch(fake_session, "LL 3")
     # Should show something
     assert len(out) > 0
+
+
+async def test_list_uses_iso_date_within_80_columns(fake_session, store):
+    msg = _msg(subject="A" * 40)
+    msg.created_at = datetime(2026, 11, 26, tzinfo=timezone.utc)
+    await store.insert_message(msg)
+    out = await _dispatch(fake_session, "L")
+    assert "2026-11-26" in out
+    assert "26-Nov-26" not in out
+    assert all(len(line) <= 80 for line in out.splitlines())
 
 
 async def test_list_mine(fake_session, store):

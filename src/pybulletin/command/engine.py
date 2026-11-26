@@ -909,7 +909,7 @@ class CommandEngine:
         await self._s.send_paged(output)
 
     def _format_list_row(self, m: Message) -> str:
-        date_str = m.created_at.strftime("%d-%b-%y") if m.created_at else "?"
+        date_str = m.created_at.strftime("%Y-%m-%d") if m.created_at else "?"
         return self._st.get(
             "list.row",
             id=m.id,
@@ -919,7 +919,7 @@ class CommandEngine:
             to=m.to_call[:10],
             **{"from": m.from_call[:10]},
             date=date_str,
-            subject=m.subject[:28],
+            subject=m.subject[:26],
         )
 
     # ------------------------------------------------------------------
