@@ -1905,20 +1905,64 @@ class CommandEngine:
         if not call:
             await self._s.send("\r\n  Usage: IE <callsign>\r\n")
             return
+        from ..auth import is_valid_call
+        if not is_valid_call(call):
+            await self._s.send("\r\n  Invalid callsign.\r\n")
+            return
         from ..store.models import WPEntry
-        entry = await self._store.get_wp_entry(call) or WPEntry(call=call)
+        entry = await self._store.get_wp_entry(call)
+        user = await self._store.get_user(call)
 
-        async def _prompt(label: str, current: str) -> str:
-            await self._s.send(f"  {label} [{current or '(none)'}]: ")
-            val = (await self._s._readline()).strip()
-            return val if val else current
+        current = {
+            "name": (user and user.display_name) or (entry and entry.name) or "",
+            "home_bbs": (user and user.home_bbs) or (entry and entry.home_bbs) or "",
+        }
+        if user is not None:
+            current.update(locator=user.locator, city=user.city, zip_code=user.zip_code)
+        labels = (
+            ("name", "Name"), ("home_bbs", "Home BBS"),
+            ("locator", "Locator"), ("city", "City/QTH"), ("zip_code", "ZIP"),
+        )
+        await self._s.send(
+            f"\r\n  Editing WP record for {call}"
+            "  (blank = keep, /CLEAR = erase, /AB = cancel)\r\n\r\n"
+        )
+        if user is None:
+            await self._s.send("  Locator, QTH, and ZIP require a local user profile.\r\n")
+        edited = current.copy()
+        for key, label in labels:
+            if key not in current:
+                continue
+            await self._s.send(f"  {label:<9} [{current[key] or '(none)'}]: ")
+            value = (await self._s._readline()).strip()
+            if value.upper() in ("/AB", "/EX"):
+                await self._s.send("\r\n  Edit cancelled.\r\n")
+                return
+            if value.upper() == "/CLEAR":
+                edited[key] = ""
+            elif value:
+                edited[key] = value.upper() if key in ("home_bbs", "locator") else value
 
-        await self._s.send(f"\r\n  Editing WP record for {call}  (blank = keep current)\r\n\r\n")
-        entry.name      = await _prompt("Name     ", entry.name or "")
-        entry.home_bbs  = (await _prompt("Home BBS ", entry.home_bbs or "")).upper()
-        entry.source_bbs = self._cfg.node.node_call
-
-        await self._store.upsert_wp_entry(entry)
+        changed = {key for key in current if edited[key] != current[key]}
+        if not changed:
+            await self._s.send("\r\n  No changes made.\r\n")
+            return
+        if user is not None:
+            if "name" in changed:
+                user.display_name = edited["name"]
+            if "home_bbs" in changed:
+                user.home_bbs = edited["home_bbs"]
+            for key in ("locator", "city", "zip_code"):
+                if key in changed:
+                    setattr(user, key, edited[key])
+            await self._store.upsert_user(user)
+        if changed & {"name", "home_bbs"}:
+            entry = entry or WPEntry(call=call)
+            entry.name = edited["name"]
+            entry.home_bbs = edited["home_bbs"]
+            entry.updated_at = datetime.now(timezone.utc)
+            entry.source_bbs = self._cfg.node.node_call
+            await self._store.upsert_wp_entry(entry)
         await self._s.send(f"\r\n  WP record for {call} updated.\r\n")
         LOG.info("session: sysop %s edited WP record for %s", self._user.call, call)
 

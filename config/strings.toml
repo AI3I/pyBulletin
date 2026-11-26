@@ -226,7 +226,7 @@ FD n <bbs>     mark message n as already forwarded to <bbs>  [SYSOP]\r
 
 IL = """\r
 IL <call>      display full White Pages record for <call>\r
-IE <call>      edit White Pages record (name, home BBS)  [SYSOP]\r
+IE <call>      edit White Pages and local profile  [SYSOP]\r
 WPS <name>     search White Pages by name or partial callsign\r
 I <call>       look up <call> (brief WP view)\r
 """

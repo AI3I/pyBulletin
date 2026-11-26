@@ -618,6 +618,58 @@ async def test_info_unknown_call(fake_session):
     assert len(out) > 0  # not found message
 
 
+async def test_ie_updates_visible_local_profile_and_wp(sysop_session, store):
+    from pybulletin.store.models import WPEntry
+    await store.record_login("W1LOOK", "peer")
+    await store.upsert_wp_entry(WPEntry(call="W1LOOK", name="Old", home_bbs="W3OLD"))
+    sysop_session.push_input("New Name", "W3NEW", "FN00FS", "Ford City, PA", "16226")
+    out = await _dispatch(sysop_session, "IE W1LOOK")
+    assert "updated" in out
+    user = await store.get_user("W1LOOK")
+    entry = await store.get_wp_entry("W1LOOK")
+    assert (user.display_name, user.home_bbs, user.locator, user.city, user.zip_code) == (
+        "New Name", "W3NEW", "FN00FS", "Ford City, PA", "16226",
+    )
+    assert (entry.name, entry.home_bbs, entry.source_bbs) == (
+        "New Name", "W3NEW", sysop_session.cfg.node.node_call,
+    )
+    detail = await _dispatch(sysop_session, "IL W1LOOK")
+    assert "New Name  @W3NEW  FN00FS  Ford City, PA  16226" in detail
+
+
+async def test_ie_blank_entries_do_not_touch_wp_timestamp(sysop_session, store):
+    from pybulletin.store.models import WPEntry
+    old = datetime(2026, 4, 6, tzinfo=timezone.utc)
+    await store.upsert_wp_entry(WPEntry(
+        call="W1LOOK", name="Old", home_bbs="W3OLD", source_bbs="W3OLD", updated_at=old,
+    ))
+    sysop_session.push_input("", "")
+    assert "No changes made" in await _dispatch(sysop_session, "IE W1LOOK")
+    entry = await store.get_wp_entry("W1LOOK")
+    assert (entry.name, entry.home_bbs, entry.source_bbs, entry.updated_at) == (
+        "Old", "W3OLD", "W3OLD", old,
+    )
+
+
+async def test_ie_cancel_and_clear(sysop_session, store):
+    from pybulletin.store.models import WPEntry
+    await store.upsert_wp_entry(WPEntry(call="W1LOOK", name="Old", home_bbs="W3OLD"))
+    sysop_session.push_input("New", "/AB")
+    assert "cancelled" in await _dispatch(sysop_session, "IE W1LOOK")
+    assert (await store.get_wp_entry("W1LOOK")).name == "Old"
+    sysop_session.push_input("/CLEAR", "")
+    assert "updated" in await _dispatch(sysop_session, "IE W1LOOK")
+    assert (await store.get_wp_entry("W1LOOK")).name == ""
+
+
+async def test_ie_creates_wp_without_creating_user(sysop_session, store):
+    sysop_session.push_input("Alice", "W3BBS")
+    assert "updated" in await _dispatch(sysop_session, "IE W1NEW")
+    entry = await store.get_wp_entry("W1NEW")
+    assert (entry.name, entry.home_bbs) == ("Alice", "W3BBS")
+    assert await store.get_user("W1NEW") is None
+
+
 # ---------------------------------------------------------------------------
 # W / WHO — session info
 # ---------------------------------------------------------------------------
