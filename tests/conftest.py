@@ -65,6 +65,7 @@ class FakeSession:
         self.cfg    = cfg
         self.strings = strings
         self.user   = user
+        self.password_authenticated = True
         self._output: list[str] = []
         self._input:  deque[str] = deque()
         self.meta = MagicMock()

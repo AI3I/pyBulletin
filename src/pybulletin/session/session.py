@@ -52,6 +52,7 @@ class BBSSession:
         self._store           = store
         self._strings         = strings
         self._user: User | None = None
+        self._password_authenticated = False
         self._channel         = CHANNEL_AX25 if meta.channel == "ax25" else CHANNEL_TELNET
         self._heard_provider  = heard_provider    # () -> list[(dt, call, port)]
         self._conference_hub  = conference_hub
@@ -93,6 +94,10 @@ class BBSSession:
     @property
     def user(self) -> User | None:
         return self._user
+
+    @property
+    def password_authenticated(self) -> bool:
+        return self._password_authenticated
 
     @property
     def cfg(self) -> AppConfig:
@@ -245,6 +250,7 @@ class BBSSession:
                     continue
 
                 self._user = await self._store.record_login(call, peer)
+                self._password_authenticated = True
                 LOG.info("session: authenticated %s from %s", call, peer)
                 return True
 

@@ -44,6 +44,34 @@ KEEP_DATA=0 KEEP_CONFIG=0 sudo -E bash deploy/uninstall.sh
 | `pybulletin-forward.service` / `.timer` | Legacy one-shot TCP helper; disabled by default because the core service schedules TCP and AX.25 forwarding. |
 | `pybulletin-retention.service` / `.timer` | One-shot message retention cleanup helper. |
 
+## Telnet SYSOP control
+
+An authenticated SYSOP can type `SYSOP STATUS` or `?SYSOP` at the BBS prompt.
+The command is available on Telnet sessions and leaves the Telnet listener on.
+For a minimal first install, run
+`sudo PYBULLETIN_ENABLE_WEB=0 bash deploy/install.sh`; the web service will
+stay disabled until `SYSOP WEB ON` is used.
+
+| Command | Effect |
+|---|---|
+| `SYSOP WEB OFF` / `ON` | Stop and disable, or enable and start, `pybulletinweb.service`. Persists across boots and upgrades. |
+| `SYSOP PUBLIC OFF` / `ON` | Disable or enable the public web UI; restarts the web service if running. |
+| `SYSOP FORWARD OFF` / `ON` | Disable or enable the forwarding listener and scheduler. |
+| `SYSOP BEACON OFF` / `ON` | Disable or enable RF beacons. |
+| `SYSOP PACTOR OFF` / `ON` | Disable or enable PACTOR; a device must be configured first. |
+| `SYSOP RADIO OFF` / `KISS_SERIAL` / `KISS_TCP` | Stop RF or select an already configured KISS modem. |
+
+Changes to forwarding, beacon, PACTOR, or radio mode save to
+`config/pybulletin.local.toml` and restart `pybulletin.service`. That restart
+disconnects current sessions; reconnect after a few seconds. The serial device,
+TCP KISS endpoint, node identity, and other detailed settings remain editable
+in the TOML config over SSH. The installer grants the `pybulletin` service user
+only the systemd operations listed above through
+`/etc/sudoers.d/pybulletin-sysop`. A normal user cannot invoke `SYSOP`.
+
+Telnet sends credentials in clear text. For remote administration, reach the
+Telnet listener through an SSH tunnel or another trusted path.
+
 The old `pybulletin-web.service` name is obsolete. Install, upgrade, and repair
 remove it and reset any failed state during migration.
 

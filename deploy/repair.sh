@@ -5,6 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/lib.sh"
 
 require_root
+PYBULLETIN_ENABLE_WEB=1
+if [ -e "$PYBULLETIN_SYSTEMD_DIR/$PYBULLETIN_WEB_SERVICE_NAME" ]; then
+  systemctl is-enabled --quiet "$PYBULLETIN_WEB_SERVICE_NAME" || PYBULLETIN_ENABLE_WEB=0
+fi
 ensure_base_packages
 ensure_supported_python
 log "repairing pyBulletin deployment in $PYBULLETIN_APP_DIR"
@@ -21,6 +25,7 @@ install_config_if_missing
 install_optional_config_if_missing "config/strings.toml" "strings.toml"
 install_optional_config_if_missing "config/pybulletin.local.toml.example" "pybulletin.local.toml.example"
 install_or_refresh_service
+install_sysop_control_sudoers
 ensure_fail2ban_packages
 install_or_refresh_fail2ban
 install_or_refresh_logrotate
@@ -28,9 +33,9 @@ enable_service
 bootstrap_sysop_account
 show_sysop_bootstrap_note
 restart_service_hard
-restart_web_service_hard
+[ "$PYBULLETIN_ENABLE_WEB" = "0" ] || restart_web_service_hard
 enable_fail2ban_service
 apply_imported_fail2ban_badips
 wait_for_systemd_active "$PYBULLETIN_SERVICE_NAME"     45 || die "core service failed to recover"
-wait_for_systemd_active "$PYBULLETIN_WEB_SERVICE_NAME" 45 || die "web service failed to recover"
+[ "$PYBULLETIN_ENABLE_WEB" = "0" ] || wait_for_systemd_active "$PYBULLETIN_WEB_SERVICE_NAME" 45 || die "web service failed to recover"
 log "repair complete"

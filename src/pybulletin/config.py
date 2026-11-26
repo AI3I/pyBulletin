@@ -191,6 +191,7 @@ class ForwardConfig:
 
 @dataclass(slots=True)
 class AppConfig:
+    source_path: str = "config/pybulletin.toml"
     node: NodeConfig = field(default_factory=NodeConfig)
     telnet: TelnetConfig = field(default_factory=TelnetConfig)
     web: WebConfig = field(default_factory=WebConfig)
@@ -433,7 +434,9 @@ def load_config(path: str) -> AppConfig:
         with local.open("rb") as f:
             data = _deep_merge(data, tomllib.load(f))
 
-    return _build_config(data)
+    config = _build_config(data)
+    config.source_path = str(p)
+    return config
 
 
 def save_config(config: AppConfig, path: str) -> None:
@@ -465,6 +468,13 @@ def save_config(config: AppConfig, path: str) -> None:
         "listen_port": config.forward.listen_port,
         "allow_unknown_peers": config.forward.allow_unknown_peers,
     }
+    for section, key, value in (
+        ("public_web", "enabled", config.public_web.enabled),
+        ("beacon", "enabled", config.beacon.enabled),
+        ("pactor", "enabled", config.pactor.enabled),
+        ("kiss", "transport", config.kiss.transport),
+    ):
+        existing.setdefault(section, {})[key] = value
     non_fwd = {k: v for k, v in existing.items() if k != "forward"}
 
     lines = ["# pyBulletin local config overrides — managed by sysop console\n"]

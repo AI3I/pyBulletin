@@ -66,6 +66,7 @@ short = """\r
           K@     Kill messages at BBS         U/DU   List / view user\r
           DS/EU  Sysop users / edit user      IL/IE  WP record view / edit\r
           F/FL   Forward / list fwd queue     FN/FD  Fwd path / drop fwd\r
+          SYSOP  Service and feature control (see ?SYSOP)\r
 ?<cmd> detail  e.g. ?L ?S ?K ?F ?U ?IL\r
 """
 

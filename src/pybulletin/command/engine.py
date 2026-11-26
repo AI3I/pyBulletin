@@ -49,6 +49,7 @@ Command set:
   P call             — white pages lookup (alias for I <call>)
   WPS name           — search White Pages by name or partial call
   F [neighbor]       — trigger forward to neighbor (sysop only)
+  SYSOP              — manage optional services and features [sysop]
   G / GB / GE        — goodbye (same as B)
   SH n [n ...]       — sysop: hold message(s)          [sysop]
   SR n [n ...]       — sysop: release held message(s)  [sysop]
@@ -145,6 +146,7 @@ class CommandEngine:
             "NB": self._cmd_nb,
             # Forwarding (sysop)
             "F":  self._cmd_forward,
+            "SYSOP": self._cmd_sysop_control,
             "FL": self._cmd_forward_list,
             "FN": self._cmd_forward_path,
             "FD": self._cmd_forward_drop,
@@ -264,6 +266,9 @@ class CommandEngine:
 
     async def _cmd_help(self, args: str) -> None:
         cmd = args.strip().upper()
+        if cmd == "SYSOP":
+            await self._s.send("\r\n  SYSOP STATUS | WEB ON/OFF | PUBLIC ON/OFF | FORWARD ON/OFF | BEACON ON/OFF | PACTOR ON/OFF | RADIO OFF/KISS_SERIAL/KISS_TCP\r\n  Core feature changes restart the BBS and disconnect sessions.\r\n")
+            return
         if not cmd:
             await self._s.send(self._st.get("help.compact"))
             return
@@ -1409,6 +1414,91 @@ class CommandEngine:
     # ------------------------------------------------------------------
     # F [neighbor] — trigger forwarding session  [sysop]
     # ------------------------------------------------------------------
+
+    async def _cmd_sysop_control(self, args: str) -> None:
+        """Manage optional node features from an authenticated SYSOP session."""
+        if self._user.privilege != PRIV_SYSOP or not self._s.password_authenticated:
+            await self._s.send(self._st.get("error.no_permission"))
+            return
+        if self._s.meta.channel != "telnet":
+            await self._s.send("\r\n  SYSOP service control is available over Telnet only.\r\n")
+            return
+
+        import asyncio
+        from ..config import load_config, save_config
+        from .. import sysop_control
+
+        parts = args.upper().split()
+        if not parts or parts == ["STATUS"]:
+            cfg = load_config(self._cfg.source_path)
+            web = await sysop_control.web_status()
+            await self._s.send(
+                "\r\n  Telnet     : running (management channel)"
+                f"\r\n  Web        : {web}"
+                f"\r\n  Public UI  : {'on' if cfg.public_web.enabled else 'off'}"
+                f"\r\n  Forwarding : {'on' if cfg.forward.enabled else 'off'}"
+                f"\r\n  Beacon     : {'on' if cfg.beacon.enabled else 'off'}"
+                f"\r\n  PACTOR     : {'on' if cfg.pactor.enabled else 'off'}"
+                f"\r\n  Radio      : {cfg.kiss.transport}"
+                "\r\n  Use ?SYSOP for commands.\r\n"
+            )
+            return
+        if len(parts) != 2:
+            await self._cmd_help("SYSOP")
+            return
+
+        feature, action = parts
+        if feature == "WEB" and action in ("ON", "OFF"):
+            ok, detail = await sysop_control.set_web(action == "ON")
+            if ok:
+                await self._s.send(f"\r\n  Web service {action.lower()}.\r\n")
+                LOG.info("session: SYSOP %s set web %s", self._user.call, action)
+            else:
+                await self._s.send(f"\r\n  Web service change failed: {detail or 'check sudoers/systemd'}\r\n")
+            return
+
+        cfg = load_config(self._cfg.source_path)
+        enabled = action == "ON"
+        if feature == "PUBLIC" and action in ("ON", "OFF"):
+            cfg.public_web.enabled = enabled
+        elif feature == "FORWARD" and action in ("ON", "OFF"):
+            cfg.forward.enabled = enabled
+        elif feature == "BEACON" and action in ("ON", "OFF"):
+            cfg.beacon.enabled = enabled
+        elif feature == "PACTOR" and action in ("ON", "OFF"):
+            if enabled and not cfg.pactor.device:
+                await self._s.send("\r\n  Set [pactor].device in the config first.\r\n")
+                return
+            cfg.pactor.enabled = enabled
+        elif feature == "RADIO" and action in ("OFF", "KISS_SERIAL", "KISS_TCP"):
+            if action == "KISS_SERIAL" and not cfg.kiss.device:
+                await self._s.send("\r\n  Set [kiss].device in the config first.\r\n")
+                return
+            if action == "KISS_TCP" and not cfg.kiss.tcp_host:
+                await self._s.send("\r\n  Set [kiss].tcp_host in the config first.\r\n")
+                return
+            cfg.kiss.transport = "disabled" if action == "OFF" else action.lower()
+        else:
+            await self._cmd_help("SYSOP")
+            return
+
+        try:
+            save_config(cfg, cfg.source_path)
+        except OSError as exc:
+            await self._s.send(f"\r\n  Could not save config: {exc}\r\n")
+            return
+        LOG.info("session: SYSOP %s set %s %s", self._user.call, feature, action)
+        if feature == "PUBLIC":
+            if await sysop_control.web_running():
+                ok, detail = await sysop_control.restart_web()
+                if not ok:
+                    await self._s.send(f"\r\n  Saved, but web restart failed: {detail}\r\n")
+                    return
+            await self._s.send(f"\r\n  Public UI {action.lower()}.\r\n")
+            return
+
+        await self._s.send(f"\r\n  {feature.title()} set to {action.lower()}; core restarting. Sessions will disconnect.\r\n")
+        asyncio.create_task(sysop_control.restart_core_later())
 
     async def _cmd_forward(self, args: str) -> None:
         if self._user.privilege != PRIV_SYSOP:

@@ -31,6 +31,7 @@ rm -f "$PYBULLETIN_FAIL2BAN_DIR/jail.d/pybulletinweb.local"
 rm -f "$PYBULLETIN_FAIL2BAN_DIR/jail.d/pybulletin-web.local"
 rm -f "$PYBULLETIN_FAIL2BAN_DIR/jail.d/pybulletin-disable-defaults.local"
 rm -f "$PYBULLETIN_LOGROTATE_DIR/pybulletin"
+rm -f /etc/sudoers.d/pybulletin-sysop
 rm -f "$PYBULLETIN_SYSOP_BOOTSTRAP_NOTE"
 rm -f "$PYBULLETIN_FAIL2BAN_BADIP_STATE"
 

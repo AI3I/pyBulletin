@@ -128,8 +128,8 @@ ensure_base_packages() {
   local mgr
   mgr="$(pkg_manager)" || die "no supported package manager found"
   case "$mgr" in
-    apt)  install_packages rsync python3 ca-certificates curl git ;;
-    dnf|yum) install_packages rsync python3 ca-certificates curl git policycoreutils ;;
+    apt)  install_packages rsync python3 ca-certificates curl git sudo ;;
+    dnf|yum) install_packages rsync python3 ca-certificates curl git sudo policycoreutils ;;
   esac
 }
 
@@ -347,6 +347,22 @@ install_or_refresh_service() {
   systemctl reset-failed pybulletin-web.service >/dev/null 2>&1 || true
 }
 
+install_sysop_control_sudoers() {
+  local systemctl_bin sudoers_file tmp
+  systemctl_bin="$(command -v systemctl)" || die "systemctl is required for SYSOP service control"
+  sudoers_file="/etc/sudoers.d/pybulletin-sysop"
+  tmp="$(mktemp)"
+  {
+    printf '%s ALL=(root) NOPASSWD: %s enable --now pybulletinweb.service\n' "$PYBULLETIN_USER" "$systemctl_bin"
+    printf '%s ALL=(root) NOPASSWD: %s disable --now pybulletinweb.service\n' "$PYBULLETIN_USER" "$systemctl_bin"
+    printf '%s ALL=(root) NOPASSWD: %s restart pybulletinweb.service\n' "$PYBULLETIN_USER" "$systemctl_bin"
+    printf '%s ALL=(root) NOPASSWD: %s restart pybulletin.service\n' "$PYBULLETIN_USER" "$systemctl_bin"
+  } > "$tmp"
+  visudo -cf "$tmp" >/dev/null || { rm -f "$tmp"; die "invalid SYSOP sudoers policy"; }
+  install -o root -g root -m 0440 "$tmp" "$sudoers_file"
+  rm -f "$tmp"
+}
+
 service_is_active()     { systemctl is-active --quiet "$PYBULLETIN_SERVICE_NAME"; }
 web_service_is_active() { systemctl is-active --quiet "$PYBULLETIN_WEB_SERVICE_NAME"; }
 
@@ -377,7 +393,7 @@ restart_web_service_hard() {
 
 enable_service() {
   systemctl enable "$PYBULLETIN_SERVICE_NAME" >/dev/null
-  systemctl enable "$PYBULLETIN_WEB_SERVICE_NAME" >/dev/null
+  [ "${PYBULLETIN_ENABLE_WEB:-1}" = "0" ] || systemctl enable "$PYBULLETIN_WEB_SERVICE_NAME" >/dev/null
   # Core service owns the minute-level scheduler and its AX.25 router.
   # The legacy one-shot timer would start concurrent TCP-only sessions.
   systemctl disable --now "$PYBULLETIN_FORWARD_TIMER_NAME" >/dev/null 2>&1 || true

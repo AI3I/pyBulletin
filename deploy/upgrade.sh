@@ -5,6 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/lib.sh"
 
 require_root
+PYBULLETIN_ENABLE_WEB=1
+if [ -e "$PYBULLETIN_SYSTEMD_DIR/$PYBULLETIN_WEB_SERVICE_NAME" ]; then
+  systemctl is-enabled --quiet "$PYBULLETIN_WEB_SERVICE_NAME" || PYBULLETIN_ENABLE_WEB=0
+fi
 # Pull latest code into the source repo before doing anything else,
 # so that lib.sh and all deploy scripts are up-to-date for this run.
 if git -C "$(repo_root)" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -26,14 +30,15 @@ install_config_if_missing
 install_optional_config_if_missing "config/strings.toml" "strings.toml"
 install_optional_config_if_missing "config/pybulletin.local.toml.example" "pybulletin.local.toml.example"
 install_or_refresh_service
+install_sysop_control_sudoers
 ensure_fail2ban_packages
 install_or_refresh_fail2ban
 install_or_refresh_logrotate
 enable_service
 restart_service_hard
-restart_web_service_hard
+[ "$PYBULLETIN_ENABLE_WEB" = "0" ] || restart_web_service_hard
 enable_fail2ban_service
 apply_imported_fail2ban_badips
 wait_for_systemd_active "$PYBULLETIN_SERVICE_NAME" 45 || die "service failed to restart"
-wait_for_systemd_active "$PYBULLETIN_WEB_SERVICE_NAME" 45 || die "web service failed to restart"
+[ "$PYBULLETIN_ENABLE_WEB" = "0" ] || wait_for_systemd_active "$PYBULLETIN_WEB_SERVICE_NAME" 45 || die "web service failed to restart"
 log "upgrade complete"
