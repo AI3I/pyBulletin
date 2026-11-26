@@ -10,7 +10,7 @@ import pytest
 from pybulletin import sysop_control
 from pybulletin.auth import hash_password
 from pybulletin.config import load_config, update_config
-from pybulletin.store.models import PRIV_SYSOP, User
+from pybulletin.store.models import Message, PRIV_SYSOP, STATUS_HELD, STATUS_KILLED, STATUS_NEW, User
 from pybulletin.web.app import WebApp
 from pybulletin.web.server import HTTPRequest
 
@@ -94,3 +94,25 @@ async def test_service_status_reports_live_and_configured_state(configured_app, 
     assert data["web"] == "running, enabled at boot"
     assert data["radio"] == "disabled"
     assert data["public"] is False
+
+
+@pytest.mark.asyncio
+async def test_sysop_message_hold_release_and_recent_listing(configured_app, store):
+    app, _ = configured_app
+    session = await app._sessions.create("N0SYS", PRIV_SYSOP)
+    ids = [await store.insert_message(Message(from_call="N0SYS", to_call="W1AW", subject=f"Message {n}")) for n in range(3)]
+    listing = await app.handle_request(_request("GET", "/api/messages", session.token))
+    assert [item["id"] for item in json.loads(listing.body)] == ids[::-1]
+
+    held = await app.handle_request(_request("POST", f"/api/messages/{ids[-1]}/hold", session.token))
+    assert held.status == 200
+    assert (await store.get_message(ids[-1])).status == STATUS_HELD
+    assert (await app.handle_request(_request("POST", f"/api/messages/{ids[-1]}/hold", session.token))).status == 409
+    released = await app.handle_request(_request("POST", f"/api/messages/{ids[-1]}/release", session.token))
+    assert released.status == 200
+    assert (await store.get_message(ids[-1])).status == STATUS_NEW
+    assert (await app.handle_request(_request("POST", f"/api/messages/{ids[-1]}/release", session.token))).status == 409
+
+    await store.kill_message(ids[-1])
+    assert (await app.handle_request(_request("POST", f"/api/messages/{ids[-1]}/hold", session.token))).status == 409
+    assert (await store.get_message(ids[-1])).status == STATUS_KILLED

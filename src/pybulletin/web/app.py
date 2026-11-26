@@ -389,6 +389,7 @@ class WebApp:
             to_call=to,
             search=search,
             limit=limit,
+            reverse=True,
         )
         return HTTPResponse.json([_msg_summary(m) for m in msgs])
 
@@ -492,7 +493,12 @@ class WebApp:
             ok = await self._store.hold_message(msg_id)
         else:
             ok = await self._store.release_message(msg_id)
-        return HTTPResponse.json({"ok": ok})
+        if not ok:
+            return HTTPResponse.json(
+                {"error": f"Message #{msg_id} cannot be changed by {action} in its current status"},
+                status=409,
+            )
+        return HTTPResponse.json({"ok": True})
 
     # ------------------------------------------------------------------
     # User endpoints (sysop)

@@ -40,7 +40,7 @@ short = """\r
  Reading  L      List msgs from base          LL     List last N messages\r
           LM     Personal mail                LB     Bulletins [category]\r
           LN     New since login              LR     List reversed\r
-          LW     Worldwide bulletins          LS     Search msgs\r
+          LW     Worldwide bulletins          LS     Search messages\r
           LD     Since date (MMDD)            LH     Held messages\r
           LK     Killed messages              LF     Forwarded messages\r
           LT     NTS/radiogram traffic        LY     Already-read messages\r

@@ -148,6 +148,7 @@
   <div class="section-header">
     <h2>Messages</h2>
     <button class="btn btn-primary btn-sm" onclick="toggleMsgCompose()">+ Compose</button>
+    <button class="btn btn-ghost btn-sm" onclick="showHeldMessages()">View held</button>
     <button class="btn btn-ghost btn-sm" onclick="loadMessages()">↻ Refresh</button>
   </div>
 
@@ -193,6 +194,7 @@
       <button class="btn btn-ghost btn-sm" onclick="closeMsgRead()">✕ Close</button>
       <button class="btn btn-ghost btn-sm" id="read-reply-btn" onclick="replyToMsg()">Reply</button>
       <button class="btn btn-ghost btn-sm" id="read-edit-btn" onclick="toggleMsgEdit()">Edit</button>
+      <button class="btn btn-ghost btn-sm" id="read-hold-btn" onclick="toggleCurrentHold()">Hold</button>
       <button class="btn btn-danger btn-sm" id="read-kill-btn" onclick="killCurrentMsg()">Kill</button>
     </div>
     <div class="msg-header" id="read-header"></div>
@@ -230,12 +232,13 @@
       <option value="K">Killed</option>
     </select>
   </div>
+  <p class="dim" style="margin:.4rem 0 .7rem">Held messages wait for SYSOP review and are excluded from forwarding. Release puts them back in the new-message queue.</p>
   <div class="card" style="padding:0">
     <div class="tbl-wrap">
       <table>
         <thead>
-          <tr><th>#</th><th>T</th><th>St</th><th>To</th><th>From</th>
-              <th>Date</th><th>Subject</th><th>Size</th><th>Actions</th></tr>
+          <tr><th>#</th><th>Type</th><th>Status</th><th>Actions</th><th>To</th><th>From</th>
+              <th>Date</th><th>Subject</th><th>Size</th></tr>
         </thead>
         <tbody id="msg-tbody">
           <tr><td colspan="9" class="empty-state">Loading…</td></tr>

@@ -219,6 +219,11 @@ or paste a token manually.
 - Statistics dashboard — message counts, connected sessions, forwarding history
 - Live session monitor — see who is connected and on which transport
 
+In **Messages**, use **Hold** on a new or read message to keep it out of
+forwarding while the SYSOP reviews it. **View held** shows those messages;
+**Release** returns one to the new-message queue. An empty held view means
+there are no messages waiting for review.
+
 API authentication uses the temporary session token returned by
 `/api/auth/login`. Browser requests handle this automatically after the sysop
 logs in. API clients should send it as `Authorization: Bearer <token>`; every

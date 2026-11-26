@@ -205,8 +205,13 @@ async function loadMessages() {
   if (status) url += `&status=${status}`;
   try {
     _msgs = await apiFetch(url);
-    renderMessages(_msgs);
+    filterMessages();
   } catch (e) { toast(e.message, "error"); }
+}
+
+function showHeldMessages() {
+  document.getElementById("msg-status").value = "H";
+  loadMessages();
 }
 
 function filterMessages() {
@@ -219,7 +224,12 @@ function filterMessages() {
 function renderMessages(msgs) {
   const tbody = document.getElementById("msg-tbody");
   if (!msgs.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="empty-state">No messages.</td></tr>`;
+    const held = document.getElementById("msg-status").value === "H";
+    const searched = document.getElementById("msg-search").value.trim();
+    const empty = searched ? "No matching messages." : held
+      ? "No held messages. Use Hold on a new or read message to put it here."
+      : "No messages in this view. Choose another status or compose a message.";
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${empty}</td></tr>`;
     return;
   }
   tbody.innerHTML = msgs.map(m => {
@@ -227,20 +237,22 @@ function renderMessages(msgs) {
     const subj = escHtml(m.subject.length>40 ? m.subject.slice(0,40)+"…" : m.subject);
     const heldBtn = m.status === "H"
       ? `<button class="btn btn-success btn-sm" onclick="releaseMsg(${m.id})">Release</button>`
-      : `<button class="btn btn-ghost btn-sm" onclick="holdMsg(${m.id})">Hold</button>`;
+      : ["N", "Y"].includes(m.status)
+        ? `<button class="btn btn-ghost btn-sm" onclick="holdMsg(${m.id})">Hold</button>`
+        : "";
+    const killBtn = m.status === "K" ? "" : `<button class="btn btn-danger btn-sm" onclick="killMsg(${m.id})">Kill</button>`;
     return `<tr onclick="readMessage(${m.id})" style="cursor:pointer">
       <td class="mono">${m.id}</td>
       <td>${typeBadge(m.type)}</td>
       <td>${statusBadge(m.status)}</td>
+      <td style="white-space:nowrap" onclick="event.stopPropagation()">
+        ${heldBtn} ${killBtn}
+      </td>
       <td class="call">${escHtml(m.to_call)}</td>
       <td class="call">${escHtml(m.from_call)}</td>
       <td class="dim">${date}</td>
       <td>${subj}</td>
       <td class="dim mono">${m.size}</td>
-      <td style="white-space:nowrap" onclick="event.stopPropagation()">
-        ${heldBtn}
-        <button class="btn btn-danger btn-sm" onclick="killMsg(${m.id})">Kill</button>
-      </td>
     </tr>`;
   }).join("");
 }
@@ -274,6 +286,10 @@ async function readMessage(id) {
     document.getElementById("msg-read-card").style.display = "";
     document.getElementById("msg-read-card").scrollIntoView({ behavior: "smooth" });
     document.getElementById("read-kill-btn").style.display = msg.status === "K" ? "none" : "";
+    const holdBtn = document.getElementById("read-hold-btn");
+    holdBtn.style.display = ["N", "Y", "H"].includes(msg.status) ? "" : "none";
+    holdBtn.textContent = msg.status === "H" ? "Release" : "Hold";
+    holdBtn.dataset.action = msg.status === "H" ? "release" : "hold";
   } catch (e) { toast("Failed to load message: " + e.message, "error"); }
 }
 
@@ -362,7 +378,8 @@ async function holdMsg(id) {
   try {
     await apiFetch(`/api/messages/${id}/hold`, { method: "POST" });
     toast(`Message #${id} held.`, "success");
-    loadMessages();
+    await loadMessages();
+    if (_currentMsgId === id) await readMessage(id);
   } catch (e) { toast(e.message, "error"); }
 }
 
@@ -370,8 +387,16 @@ async function releaseMsg(id) {
   try {
     await apiFetch(`/api/messages/${id}/release`, { method: "POST" });
     toast(`Message #${id} released.`, "success");
-    loadMessages();
+    await loadMessages();
+    if (_currentMsgId === id) await readMessage(id);
   } catch (e) { toast(e.message, "error"); }
+}
+
+async function toggleCurrentHold() {
+  if (!_currentMsgId) return;
+  const action = document.getElementById("read-hold-btn").dataset.action;
+  if (action === "release") await releaseMsg(_currentMsgId);
+  else await holdMsg(_currentMsgId);
 }
 
 async function killMsg(id) {

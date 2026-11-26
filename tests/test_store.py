@@ -201,6 +201,21 @@ async def test_hold_and_release(store: BBSStore):
     assert (await store.get_message(msg_id)).status == STATUS_NEW
 
 
+async def test_hold_release_only_change_active_messages(store: BBSStore):
+    killed_id = await store.insert_message(_msg(status=STATUS_KILLED))
+    forwarded_id = await store.insert_message(_msg(status=STATUS_FORWARDED))
+    read_id = await store.insert_message(_msg(status=STATUS_READ))
+    assert not await store.hold_message(killed_id)
+    assert not await store.hold_message(forwarded_id)
+    assert not await store.release_message(killed_id)
+    assert not await store.release_message(read_id)
+    assert await store.hold_message(read_id)
+    assert not await store.hold_message(read_id)
+    assert await store.release_message(read_id)
+    assert (await store.get_message(killed_id)).status == STATUS_KILLED
+    assert (await store.get_message(forwarded_id)).status == STATUS_FORWARDED
+
+
 async def test_mark_forwarded(store: BBSStore):
     msg_id = await store.insert_message(_msg())
     assert await store.mark_forwarded(msg_id)

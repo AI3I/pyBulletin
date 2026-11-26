@@ -13,7 +13,7 @@ from .models import (
     FileEntry, ForwardNeighbor, Message, MfaChallenge, User, UserPref, WPEntry,
     MSG_BULLETIN, MSG_NTS, MSG_PRIVATE,
     PRIV_NONE, PRIV_USER, PRIV_SYSOP,
-    STATUS_KILLED, STATUS_NEW, STATUS_READ,
+    STATUS_HELD, STATUS_KILLED, STATUS_NEW, STATUS_READ,
 )
 
 LOG = logging.getLogger(__name__)
@@ -536,11 +536,22 @@ class BBSStore:
         return await self.update_message_status(msg_id, STATUS_KILLED)
 
     async def hold_message(self, msg_id: int) -> bool:
-        from .models import STATUS_HELD
-        return await self.update_message_status(msg_id, STATUS_HELD)
+        async with self._lock:
+            cur = self._conn.execute(
+                "UPDATE messages SET status = ? WHERE id = ? AND status IN (?, ?)",
+                (STATUS_HELD, msg_id, STATUS_NEW, STATUS_READ),
+            )
+            self._conn.commit()
+        return cur.rowcount > 0
 
     async def release_message(self, msg_id: int) -> bool:
-        return await self.update_message_status(msg_id, STATUS_NEW)
+        async with self._lock:
+            cur = self._conn.execute(
+                "UPDATE messages SET status = ? WHERE id = ? AND status = ?",
+                (STATUS_NEW, msg_id, STATUS_HELD),
+            )
+            self._conn.commit()
+        return cur.rowcount > 0
 
     async def mark_forwarded(self, msg_id: int) -> bool:
         from .models import STATUS_FORWARDED
