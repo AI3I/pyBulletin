@@ -33,14 +33,25 @@ The mailbox was empty when the session ended. A separate duplicate BID
 test produced `NO` followed by `>`. Since `NO` can also mean a general
 rejection, pyBulletin leaves that message pending for a later attempt.
 
-Set `protocol = "w0rli"` on a neighbor for the classic HM$ text exchange.
+Set `protocol = "w0rli"` on a neighbor for the classic H$ text exchange.
+The KPC advertises `HM$`, which pyBulletin accepts. pyBulletin advertises
+`H$`: the 1998 specification assigns `M` to MID behavior that pyBulletin does
+not implement and discourages because it can lose messages. Outbound messages
+receive a GMT `R:` routing header; existing `R:` headers remain in order.
+The parser accepts `OK`/`NO`, their one-letter forms, the extended rejection
+forms, and both Ctrl-Z and `/EX` message endings.
+The store currently generates a BID for every message. The specification
+reserves generated BIDs for bulletins and distribution messages, so private
+message BID provenance remains an interoperability gap.
 The pyBulletin implementation is covered by `tests/test_w0rli.py` for
 outbound, reverse, duplicate, inbound, and interrupted transfer. It has not
 yet connected to the KPC through pyBulletin's AX.25 transport. A separate
 radio/modem endpoint is needed for that test.
 
-The [1993 BBS Interface Specification working draft](https://www.ir3ip.net/iw3fqg/doc/bbsspec.htm)
-describes the SID, send command, response, body, and reverse-forward sequence.
+The [1998 W0RLI BBS Specification](https://tarpn.net/t/faq/w0rli-bbs-spec-12oct1998.pdf)
+describes the SID, send command, response, routing header, body, and
+reverse-forward sequence. The [1993 working draft](https://www.ir3ip.net/iw3fqg/doc/bbsspec.htm)
+is an earlier version.
 The local *Kantronics KPC-9612 Manual* and ROM 8.2 addendum describe the
 mailbox controls. The [PK-232MBX manual](https://www.dl0bn.de/dc7xj/Anleitungen/AEA%20PK-232MBX_Manual.pdf)
 documents a related W0RLI/WA7MBL-style MailDrop, but its prompt and

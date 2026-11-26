@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import re
 
 import pytest
 
 from pybulletin.config import AppConfig, ForwardNeighborConfig
 from pybulletin.forward.session import ForwardSession, _WireReader
-from pybulletin.forward.w0rli import _parse_send, _send_command, _sid
+from pybulletin.forward.w0rli import _parse_send, _routing_body, _send_command, _sid
 from pybulletin.store.models import Message, MSG_BULLETIN, MSG_PRIVATE
 from pybulletin.store.store import BBSStore
 
@@ -40,6 +41,18 @@ def test_classic_proposal_roundtrip():
         _send_command(msg)
 
 
+def test_classic_routing_header_preserves_origin():
+    cfg = AppConfig()
+    cfg.node.node_call = "A1AAA-14"
+    session = type("Session", (), {"_cfg": cfg})()
+    msg = Message(id=3, body="R:261125/1200 9@C1CCC\nOriginal body")
+    routed = _routing_body(session, msg)
+    assert re.fullmatch(
+        r"R:\d{6}/\d{4} 3@A1AAA\nR:261125/1200 9@C1CCC\n\nOriginal body",
+        routed,
+    )
+
+
 @pytest.mark.asyncio
 async def test_classic_outgoing_reverse_and_duplicate(tmp_path):
     store = BBSStore(str(tmp_path / "classic.db"))
@@ -55,13 +68,13 @@ async def test_classic_outgoing_reverse_and_duplicate(tmp_path):
         wire = _WireReader(reader)
         writer.write(b"[KPC9612-8.2-HM$]\r486720 BYTES AVAILABLE\rENTER COMMAND: B,J,K,L,R,S, or Help >\r")
         await writer.drain()
-        seen.append(await _line(wire))  # our HM$ SID
+        seen.append(await _line(wire))  # our H$ SID
         writer.write(b">\r")
         await writer.drain()
         proposal = await _line(wire)
         seen.append(proposal)
         if proposal.startswith("SB "):
-            writer.write(b"OK\r")
+            writer.write(b"O accepted\r")
             await writer.drain()
             seen.append(await _body(wire))
             writer.write(b">\r")
@@ -88,7 +101,9 @@ async def test_classic_outgoing_reverse_and_duplicate(tmp_path):
     try:
         assert await asyncio.wait_for(ForwardSession(cfg, store, neighbor).run_outgoing(), 5) == (1, 1)
         assert seen[1] == "SB ALL @ WW < A1AAA $CLASSIC01"
-        assert seen[2] == ("Forward", "Hello KPC")
+        assert seen[0].endswith("-H$]")
+        assert seen[2][0] == "Forward"
+        assert re.fullmatch(r"R:\d{6}/\d{4} 1@A1AAA\n\nHello KPC", seen[2][1])
         assert [(m.bid, m.body) for m in await store.list_messages() if m.bid == "RETURN01"] == [
             ("RETURN01", "R:261126/0122 2@B1BBB.PA.USA.NOAM\nHello pyBulletin")]
         assert await asyncio.wait_for(ForwardSession(cfg, store, neighbor).run_outgoing(), 5) == (0, 0)
@@ -156,7 +171,7 @@ async def test_classic_incoming_and_reverse(tmp_path):
     try:
         reader, writer = await asyncio.open_connection("127.0.0.1", port)
         wire = _WireReader(reader)
-        assert "HM$" in await _line(wire)
+        assert "-H$]" in await _line(wire)
         assert await _line(wire) == ">"
         writer.write(b"[KPC9612-8.2-HM$]\r")
         await writer.drain()
@@ -164,15 +179,17 @@ async def test_classic_incoming_and_reverse(tmp_path):
         writer.write(b"SP A1AAA @ A1AAA < B1BBB $IN01\r")
         await writer.drain()
         assert await _line(wire) == "OK"
-        writer.write(b"From KPC\rInbound body\r\x1a\r")
+        writer.write(b"From KPC\rInbound body\r/EX\r")
         await writer.drain()
         assert await _line(wire) == ">"
         writer.write(b"F>\r")
         await writer.drain()
         assert await _line(wire) == "SP B1BBB @ B1BBB < A1AAA $OUT01"
-        writer.write(b"OK\r")
+        writer.write(b"O\r")
         await writer.drain()
-        assert await _body(wire) == ("For KPC", "Reply text")
+        subject, body = await _body(wire)
+        assert subject == "For KPC"
+        assert re.fullmatch(r"R:\d{6}/\d{4} 1@A1AAA\n\nReply text", body)
         writer.write(b"F>\r")
         await writer.drain()
         assert await _line(wire) == "*** DONE"

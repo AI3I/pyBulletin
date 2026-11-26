@@ -417,9 +417,16 @@ async def test_manual_rf_forwarding_both_directions_over_kiss_tcp(tmp_path, prot
         await asyncio.wait_for(connected.wait(), 3)
         control = await start_control_server(cfg_a, ForwardScheduler(cfg_a, a, router_a))
         assert await asyncio.wait_for(request_connect(cfg_a, "B1BBB"), 12) == (1, 1)
-        assert [(m.subject, m.body) for m in await b.list_messages() if m.subject == "Outbound"] == [
+        outbound = [(m.subject, m.body) for m in await b.list_messages() if m.subject == "Outbound"]
+        returned = [(m.subject, m.body) for m in await a.list_messages() if m.subject == "Return"]
+        if protocol == "w0rli":
+            assert outbound[0][1].startswith("R:") and "@A1AAA\n\n" in outbound[0][1]
+            assert returned[0][1].startswith("R:") and "@B1BBB\n\n" in returned[0][1]
+            outbound = [(subject, body.split("\n\n", 1)[1]) for subject, body in outbound]
+            returned = [(subject, body.split("\n\n", 1)[1]) for subject, body in returned]
+        assert outbound == [
             ("Outbound", "A to B over KISS")]
-        assert [(m.subject, m.body) for m in await a.list_messages() if m.subject == "Return"] == [
+        assert returned == [
             ("Return", "B to A over KISS")]
         assert len(frames) > 4 and all(cmd == CMD_DATA for _, cmd in frames)
         assert (await a.pending_delivery_counts(cfg_a.forward.neighbors, "A1AAA"))["B1BBB"] == 0

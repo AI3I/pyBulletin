@@ -1,12 +1,13 @@
-"""Classic W0RLI/Kantronics text forwarding (HM$), separate from FBB.
+"""Classic W0RLI/Kantronics text forwarding (H$), separate from FBB.
 
 The KPC-9612 ROM 8.2 internal PBBS confirmed the SID, short prompt,
 SP/OK/body/prompt, duplicate NO, and reverse F>/message/DONE exchanges.
-The session flow also follows the 1993 BBS Interface Specification draft.
+The session flow follows the 1998 BBS Specification.
 """
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
 from .. import __version__
 from ..store.models import Message, MSG_BULLETIN, MSG_NTS, MSG_PRIVATE
@@ -63,20 +64,44 @@ async def _prompt(session) -> None:
 async def _response(session) -> bool:
     for _ in range(30):
         line = (await session._readline()).strip().upper()
-        if line == "OK" or line.startswith("OK "):
+        token = line.split(maxsplit=1)[0] if line else ""
+        if token in ("OK", "O"):
             return True
-        if line == "NO" or line.startswith("NO "):
+        if token in ("NO", "N", "REJECT", "R", "LATER", "L"):
             return False
     raise ConnectionError("classic forwarding acceptance response not received")
+
+
+def _routing_body(session, msg: Message) -> str:
+    """Add this BBS's GMT routing stamp before any received routing stamps."""
+    stamp = datetime.now(timezone.utc).strftime("%y%m%d/%H%M")
+    number = (max(msg.id, 1) - 1) % 65535 + 1
+    bbs = session._cfg.node.node_call.upper().split("-", 1)[0]
+    header = f"R:{stamp} {number}@{bbs}"
+    body = msg.body.replace("\r\n", "\n").replace("\r", "\n")
+    lines = body.split("\n")
+    old_headers = 0
+    for line in lines:
+        if re.match(r"R:\d{6}/\d{4}", line, re.I):
+            old_headers += 1
+        else:
+            break
+    if old_headers:
+        remaining = lines[old_headers:]
+        if remaining and not remaining[0]:
+            remaining = remaining[1:]
+        return "\n".join([header, *lines[:old_headers], "", *remaining])
+    return header + "\n\n" + body
 
 
 async def _write_body(session, msg: Message) -> None:
     if "\x1a" in msg.subject + msg.body:
         raise ValueError("classic forwarding message contains an end marker")
-    if len(msg.subject) > 79 or len(msg.body.encode("utf-8")) > _MAX_BODY:
+    body = _routing_body(session, msg)
+    if len(msg.subject) > 79 or len(body.encode("utf-8")) > _MAX_BODY:
         raise ValueError("classic forwarding message exceeds size limit")
     payload = msg.subject.replace("\r", " ").replace("\n", " ") + "\r"
-    payload += msg.body.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r")
+    payload += body.replace("\n", "\r")
     payload += "\r\x1a\r"
     session._writer.write(payload.encode("ascii", errors="replace"))
     await session._writer.drain()
@@ -88,7 +113,7 @@ async def _read_body(session, msg: Message) -> None:
     size = 0
     while True:
         line = await session._readline()
-        if line == "\x1a":
+        if line in ("\x1a", "/EX"):
             break
         if "\x1a" in line:
             raise ValueError("unexpected classic forwarding end marker")
@@ -185,7 +210,7 @@ async def _send_as_slave(session) -> None:
 
 async def run(session, *, caller: bool, greeted: bool = False) -> None:
     """Exchange classic mail on the connected ForwardSession transport."""
-    our_sid = f"[{session._cfg.node.node_call}-pyBulletin{__version__}-HM$]"
+    our_sid = f"[{session._cfg.node.node_call}-pyBulletin{__version__}-H$]"
     if not caller and not greeted:
         await session._writeline(our_sid)
         await session._writeline(">")
