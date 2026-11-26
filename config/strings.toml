@@ -12,7 +12,7 @@ banner    = "\r\n{branding} [{node_call}] de {node_call}\r\n"
 motd      = "\r\n{motd}\r\n"
 login_tip = "\r\n{login_tip}\r\n"
 prompt        = "\r\n{node_call}{prompt_char}{suffix} "
-prompt_expert = "{node_call}{prompt_char} "
+prompt_expert = "{prompt_char} "
 goodbye   = "\r\nBye de {node_call}\r\n"
 session_info = "Welcome, {call}. You have {new_mail} new message(s).\r\n"
 page_break = "\r\n-- More -- (press ENTER or A to abort) "
@@ -140,7 +140,7 @@ O                   show current options\r
 O PAGER <n>         set page length (lines per screen); 0 = paging off\r
 O LINES <n>         same as O PAGER\r
 O COLS <n>          set terminal column width\r
-O EXPERT on|off     toggle expert mode (suppresses extra prompts)\r
+O EXPERT on|off     toggle expert mode (short prompt)\r
 O LANG <code>       set language preference (e.g. en)\r
 O BASE <n>          set your message base pointer to message # n\r
 O PW                change your login password\r

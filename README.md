@@ -528,7 +528,7 @@ End a message with `/EX` or `Ctrl-Z`. Abort with `/AB`.
 | `O` | Show current options |
 | `O LINES n` | Set pager line count (0 = off) |
 | `O COLS n` | Set terminal column width |
-| `O EXPERT ON\|OFF` | Toggle expert mode (suppress hints) |
+| `O EXPERT ON\|OFF` | Toggle expert mode (short `>` or `#` prompt) |
 | `O PW` | Change password |
 | `X` | Toggle expert mode (shorthand) |
 
