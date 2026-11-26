@@ -149,7 +149,7 @@ _MAX_MSG_BYTES    = 256_000  # 256 KB max per message
 
 
 class ForwardSession:
-    """One FBB ASCII forwarding session with a single neighbor."""
+    """One forwarding session with an FBB or classic HM$ neighbor."""
 
     def __init__(
         self,
@@ -158,8 +158,8 @@ class ForwardSession:
         neighbor: ForwardNeighborConfig,
         router=None,
     ) -> None:
-        if neighbor.protocol.lower() not in ("ascii", "b0"):
-            raise ValueError(f"unsupported FBB forwarding format: {neighbor.protocol}")
+        if neighbor.protocol.lower() not in ("ascii", "b0", "w0rli"):
+            raise ValueError(f"unsupported forwarding format: {neighbor.protocol}")
         self._cfg      = cfg
         self._store    = store
         self._neighbor = neighbor
@@ -260,6 +260,11 @@ class ForwardSession:
 
     async def _run(self, caller: bool, greeted: bool = False) -> None:
         assert self._reader and self._writer
+
+        if self._neighbor.protocol.lower() == "w0rli":
+            from .w0rli import run as run_classic
+            await run_classic(self, caller=caller, greeted=greeted)
+            return
 
         our_sid = gen_sid(self._cfg.node.node_call, compressed=self._binary)
         if not caller and not greeted:

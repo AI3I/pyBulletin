@@ -360,7 +360,8 @@ async def test_ax25_forwarding_between_two_routers(tmp_path):
         await b.close()
 
 
-async def test_manual_rf_forwarding_both_directions_over_kiss_tcp(tmp_path):
+@pytest.mark.parametrize("protocol", ["ascii", "w0rli"])
+async def test_manual_rf_forwarding_both_directions_over_kiss_tcp(tmp_path, protocol):
     """A local KISS relay carries real framed AX.25 traffic in both directions."""
     a = BBSStore(str(tmp_path / "kiss-a.db"))
     b = BBSStore(str(tmp_path / "kiss-b.db"))
@@ -369,8 +370,8 @@ async def test_manual_rf_forwarding_both_directions_over_kiss_tcp(tmp_path):
     cfg_b.store.sqlite_path = str(tmp_path / "kiss-b.db")
     cfg_a.node.node_call = "A1AAA"
     cfg_b.node.node_call = "B1BBB"
-    cfg_a.forward.neighbors = [ForwardNeighborConfig(call="B1BBB", address="B1BBB")]
-    cfg_b.forward.neighbors = [ForwardNeighborConfig(call="A1AAA", address="A1AAA")]
+    cfg_a.forward.neighbors = [ForwardNeighborConfig(call="B1BBB", address="B1BBB", protocol=protocol)]
+    cfg_b.forward.neighbors = [ForwardNeighborConfig(call="A1AAA", address="A1AAA", protocol=protocol)]
     await a.insert_message(Message(
         msg_type=MSG_BULLETIN, from_call="A1AAA", to_call="ALL", at_bbs="WW",
         subject="Outbound", body="A to B over KISS",

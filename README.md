@@ -565,6 +565,10 @@ pyBulletin supports both **outbound** (caller) and **inbound** (called) FBB ASCI
 and compressed B0 forwarding sessions. Set `protocol = "b0"` for LinBPQ's
 compressed FBB exchange. Existing `protocol = "b1"` or `"b2"` settings load
 for upgrades but use ASCII until those modes have been verified.
+For a Kantronics KPC PBBS that advertises `HM$`, use `protocol = "w0rli"`.
+Its classic text exchange is separate from FBB; see the
+[KPC-9612 lab record](docs/kantronics-forwarding.md) for the no-radio test
+and remaining RF validation.
 
 **Outbound** connects are triggered by the cron schedule defined per neighbor, or manually with the `F` command.
 The SYSOP neighbor list also has a **Connect RF** action for neighbors whose
@@ -590,6 +594,8 @@ exchanged compressed B0 mail in both directions. RF and LinFBB still need the
 |----------|----------|
 | LinFBB (F6FBB) | FBB ASCII; live validation pending |
 | BPQ32 / LinBPQ (G8BPQ) | FBB compressed B0; LinBPQ TCP lab validated |
+| Kantronics KPC-9612 PBBS | W0RLI/HM$; internal PBBS dialogue captured, RF pending |
+| AEA PK-232MBX MailDrop | W0RLI/WA7MBL-style; compatibility untested |
 | JNOS | FBB ASCII; live validation pending |
 
 ---
